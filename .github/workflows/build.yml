@@ -10,9 +10,11 @@ on:
     - cron: '0 22 * * 4-9'
 
 jobs:
-  run:
+  build:
     permissions: write-all
     runs-on: ubuntu-latest
+    env:
+      REPO_URL: https://raw.githubusercontent.com/${{ github.repository }}/update/build.md
 
     steps:
       - uses: actions/setup-java@v4
@@ -20,7 +22,7 @@ jobs:
           distribution: "zulu"
           java-version: "17"
 
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -37,8 +39,6 @@ jobs:
 
       - name: Get next version code
         id: next_ver_code
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG=$(gh release list -L 1 | awk -F '\t' '{print $3}')
           if [ -z "$TAG" ]; then TAG=0; fi
@@ -53,7 +53,6 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: $GITHUB_REPOSITORY
           NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
 
       - name: Get build output
@@ -66,11 +65,8 @@ jobs:
           cp -f build.md build.tmp
 
       - name: Create GitHub release tag
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="v${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}"
-          echo "Creating release tag $VERSION"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -f $VERSION
@@ -88,17 +84,19 @@ jobs:
           overwrite: true
 
       - name: Update changelog & Magisk JSONs
-        id: update_config
         run: |
           git checkout -f update || git switch --discard-changes --orphan update
           cp -f build.tmp build.md
 
           get_update_json() {
+            local VERSION="$1"
+            local ZIPURL="$2"
+            local VER_CODE="$3"
             echo "{
-  \"version\": \"$1\",
-  \"versionCode\": ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }},
-  \"zipUrl\": \"$2\",
-  \"changelog\": \"https://raw.githubusercontent.com/$GITHUB_REPOSITORY/update/build.md\"
+  \"version\": \"$VERSION\",
+  \"versionCode\": $VER_CODE,
+  \"zipUrl\": \"$ZIPURL\",
+  \"changelog\": \"$REPO_URL\"
 }"
           }
 
@@ -111,7 +109,7 @@ jobs:
             VER=$(echo "$ZIP_S" | grep version=)
             VER="${VER##*=}"
             DLURL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/v${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
-            get_update_json "$VER" "$DLURL" > "../$UPDATE_JSON"
+            get_update_json "$VER" "$DLURL" "${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}" > "../$UPDATE_JSON"
           done
           cd ..
 
@@ -130,14 +128,10 @@ jobs:
         if: env.TG_TOKEN != null
         run: |
           cd build || { echo "build folder not found"; exit 1; }
-
-          # Telegram chat ID or channel
           TG_CHAT="@rvc_magisk"
           NL=$'\n'
           APKS=""
           MODULES=""
-
-          # Separate APKs and Magisk modules
           for OUTPUT in *; do
             DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/v${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
             if [[ $OUTPUT = *.apk ]]; then
@@ -148,8 +142,6 @@ jobs:
           done
           MODULES=${MODULES#"$NL"}
           APKS=${APKS#"$NL"}
-
-          # Format changelog
           BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
           MSG="*New build!*
 
@@ -159,7 +151,7 @@ ${BODY}
 Modules:${MODULES}
 APKs:${APKS}
 "
-          MSG=${MSG:0:9450}  # Telegram character limit
+          MSG=${MSG:0:9450}
           POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
           curl -X POST --data-urlencode "parse_mode=Markdown" \
                --data-urlencode "disable_web_page_preview=true" \
