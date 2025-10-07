@@ -1,7 +1,9 @@
 name: Build Modules
+
 on:
   schedule:
-    - cron: '0 18 * * *'  # Runs daily at 4am Sydney time (AEST/UTC+10)
+    # 18:00 UTC daily ≈ 4am Sydney during AEST (UTC+10). During AEDT (UTC+11) this will be 5am.
+    - cron: '0 18 * * *'
   workflow_call:
     inputs:
       from_ci:
@@ -30,7 +32,7 @@ jobs:
         if: $${{ inputs.from_ci }}
         shell: bash
         run: |
-          if git checkout origin/update build.md; then
+          if git checkout origin/update build.md 2>/dev/null; then
             UPDATE_CFG=$$(./build.sh config.toml --config-update)
             if [ -n "$$UPDATE_CFG" ]; then
               echo "$$UPDATE_CFG" > config.json
@@ -44,14 +46,19 @@ jobs:
         run: |
           TAG=$$(gh release list -L 1 | awk -F '\t' '{print $$3}')
           if [ -z "$$TAG" ]; then TAG=0; fi
-          echo "NEXT_VER_CODE=$$((TAG + 1))" >> $$GITHUB_OUTPUT
+          echo "NEXT_VER_CODE=$$((TAG + 1))" >> "$$GITHUB_OUTPUT"
 
       - name: Build modules/APKs
-        run: if [ -f "config.json" ]; then ./build.sh config.json; else ./build.sh config.toml; fi
         env:
           GITHUB_TOKEN: $${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: $$GITHUB_REPOSITORY
           NEXT_VER_CODE: $${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
+        run: |
+          if [ -f "config.json" ]; then
+            ./build.sh config.json
+          else
+            ./build.sh config.toml
+          fi
 
       - name: Get output
         id: get_output
@@ -75,19 +82,22 @@ jobs:
 
       - name: Update changelog and Magisk update json
         id: update_config
+        shell: bash
         run: |
           git checkout -f update || git switch --discard-changes --orphan update
           cp -f build.tmp build.md
+
           get_update_json() {
             echo "{
-            \"version\": \"$$1\",
-            \"versionCode\": $${{ steps.next_ver_code.outputs.NEXT_VER_CODE }},
-            \"zipUrl\": \"$$2\",
-            \"changelog\": \"https://raw.githubusercontent.com/$$GITHUB_REPOSITORY/update/build.md\"
-          }"
+              \"version\": \"$$1\",
+              \"versionCode\": $${{ steps.next_ver_code.outputs.NEXT_VER_CODE }},
+              \"zipUrl\": \"$$2\",
+              \"changelog\": \"https://raw.githubusercontent.com/$$GITHUB_REPOSITORY/update/build.md\"
+            }"
           }
-          
+
           cd build || { echo "build folder not found"; exit 1; }
+
           for OUTPUT in *magisk*.zip; do
             [ "$$OUTPUT" = "*magisk*.zip" ] && continue
             ZIP_S=$$(unzip -p "$$OUTPUT" module.prop)
@@ -98,9 +108,9 @@ jobs:
             DLURL="$$GITHUB_SERVER_URL/$$GITHUB_REPOSITORY/releases/download/$${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/$${OUTPUT}"
             get_update_json "$$VER" "$$DLURL" >"../$$UPDATE_JSON"
           done
+
           cd ..
-          
-          find . -name "*-update.json" | grep . || : >dummy-update.json
+          find . -name "*-update.json" | grep . || : > dummy-update.json
 
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
@@ -110,17 +120,19 @@ jobs:
           commit_message: Bump version $${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
 
       - name: Report to Telegram
+        if: env.TG_TOKEN != null && env.TG_CHAT_ID != null
         env:
           TG_TOKEN: $${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: $${{ secrets.TG_CHAT_ID }}
-        if: env.TG_TOKEN != null && env.TG_CHAT_ID != null
+        shell: bash
         run: |
           cd build || { echo "build folder not found"; exit 1; }
-          
+
+          TG_CHAT="$$TG_CHAT_ID"
           NL=$$'\n'
           APKS=""
           MODULES=""
-          
+
           for OUTPUT in *; do
             DL_URL="$$GITHUB_SERVER_URL/$$GITHUB_REPOSITORY/releases/download/$${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/$${OUTPUT}"
             if [[ $$OUTPUT = *.apk ]]; then
@@ -129,25 +141,29 @@ jobs:
               MODULES+="$${NL}📦[$${OUTPUT}]($${DL_URL})"
             fi
           done
-          
+
           MODULES=$${MODULES#"$$NL"}
           APKS=$${APKS#"$$NL"}
-          
+
           BODY="$$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
-          
+
           MSG="*✅ Build Complete!*
           $${BODY}
-          
+
           *▼ Download Links:*
           Modules:
           $${MODULES}
-          
+
           APKs:
           $${APKS}
           "
-          
+
           echo "'$$MSG'"
           MSG=$${MSG:0:9450}
-          
           POST="https://api.telegram.org/bot$${TG_TOKEN}/sendMessage"
-          curl -X POST --data-urlencode "parse_mode=Markdown" --data-urlencode "disable_web_page_preview=true" --data-urlencode "text=$${MSG}" --data-urlencode "chat_id=$${TG_CHAT_ID}" "$$POST"
+          curl -X POST \
+               --data-urlencode "parse_mode=Markdown" \
+               --data-urlencode "disable_web_page_preview=true" \
+               --data-urlencode "text=$${MSG}" \
+               --data-urlencode "chat_id=$${TG_CHAT}" \
+               "$POST"
