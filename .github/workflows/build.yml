@@ -92,12 +92,14 @@ jobs:
             local VERSION="$1"
             local ZIPURL="$2"
             local VER_CODE="$3"
-            echo "{
-  \"version\": \"$VERSION\",
-  \"versionCode\": $VER_CODE,
-  \"zipUrl\": \"$ZIPURL\",
-  \"changelog\": \"$REPO_URL\"
-}"
+            cat <<EOF
+{
+  "version": "$VERSION",
+  "versionCode": $VER_CODE,
+  "zipUrl": "$ZIPURL",
+  "changelog": "$REPO_URL"
+}
+EOF
           }
 
           cd build || { echo "build folder not found"; exit 1; }
