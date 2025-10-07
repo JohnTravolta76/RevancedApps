@@ -111,11 +111,11 @@ jobs:
       - name: Report to Telegram
         env:
           TG_TOKEN: $${{ secrets.TG_TOKEN }}
-        if: env.TG_TOKEN != null
+          TG_CHAT_ID: $${{ secrets.TG_CHAT_ID }}
+        if: env.TG_TOKEN != null && env.TG_CHAT_ID != null
         run: |
           cd build || { echo "build folder not found"; exit 1; }
           
-          TG_CHAT="@rvc_magisk"
           NL=$$'\n'
           APKS=""
           MODULES=""
@@ -134,7 +134,7 @@ jobs:
           
           BODY="$$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
           
-          MSG="*New build!*
+          MSG="*✅ Build Complete!*
           $${BODY}
           
           *▼ Download Links:*
@@ -149,4 +149,4 @@ jobs:
           MSG=$${MSG:0:9450}
           
           POST="https://api.telegram.org/bot$${TG_TOKEN}/sendMessage"
-          curl -X POST --data-urlencode "parse_mode=Markdown" --data-urlencode "disable_web_page_preview=true" --data-urlencode "text=$${MSG}" --data-urlencode "chat_id=$${TG_CHAT}" "$POST"
+          curl -X POST --data-urlencode "parse_mode=Markdown" --data-urlencode "disable_web_page_preview=true" --data-urlencode "text=$${MSG}" --data-urlencode "chat_id=$${TG_CHAT_ID}" "$$POST"
