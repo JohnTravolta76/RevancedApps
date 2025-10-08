@@ -2,10 +2,14 @@ name: Daily 5am Sydney Build
 
 on:
   schedule:
-    # Cover both DST states (AEDT and AEST); we’ll gate to 05:00 local time below
+    # Cover both DST states (AEDT and AEST); we'll gate to 05:00 local time below
     - cron: '0 18 * * *'  # 05:00 AEDT (UTC+11)
     - cron: '0 19 * * *'  # 05:00 AEST (UTC+10)
   workflow_dispatch:
+
+concurrency:
+  group: daily-5am-sydney
+  cancel-in-progress: false
 
 jobs:
   gate:
@@ -34,6 +38,7 @@ jobs:
   run-build:
     needs: gate
     if: needs.gate.outputs.run == 'true'
+    permissions: write-all
     uses: ./.github/workflows/build.yml
     with:
       from_ci: true
