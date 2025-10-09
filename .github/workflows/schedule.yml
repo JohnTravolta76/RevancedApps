@@ -1,4 +1,4 @@
-name: Daily 5am Sydney Build
+name: Daily 5am
 
 on:
   schedule:
