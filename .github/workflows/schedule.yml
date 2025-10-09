@@ -27,12 +27,17 @@ jobs:
           fi
 
           export TZ=Australia/Sydney
-          NOW="$(date +%H:%M)"
-          echo "Local time in Australia/Sydney: $NOW"
-          if [ "$NOW" = "05:00" ]; then
-            echo "run=true" >> $GITHUB_OUTPUT
-          else
-            echo "run=false" >> $GITHUB_OUTPUT
+          NOW_HOUR="$(date +%H)"
+          NOW_MINUTE="$(date +%M)"
+          echo "Local time in Australia/Sydney: ${NOW_HOUR}:${NOW_MINUTE}"
+          
+          # Check if it's the 5 AM hour  
+          if [ "$NOW_HOUR" = "05" ]; then  
+            echo "Current time is within the 5 AM hour; allowing run."  
+            echo "run=true" >> $GITHUB_OUTPUT  
+          else  
+            echo "Current time is outside the 5 AM hour; skipping."  
+            echo "run=false" >> $GITHUB_OUTPUT  
           fi
 
   check-updates:
