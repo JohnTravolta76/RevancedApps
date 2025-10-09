@@ -2,7 +2,6 @@ name: Daily 5am Sydney Build
 
 on:
   schedule:
-    # Cover both DST states (AEDT and AEST); we'll gate to 05:00 local time below
     - cron: '0 18 * * *'  # 05:00 AEDT (UTC+11)
     - cron: '0 19 * * *'  # 05:00 AEST (UTC+10)
   workflow_dispatch:
@@ -21,7 +20,6 @@ jobs:
         id: gate
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual dispatch - allowing run"
             echo "run=true" >> $GITHUB_OUTPUT
             exit 0
           fi
@@ -35,9 +33,90 @@ jobs:
             echo "run=false" >> $GITHUB_OUTPUT
           fi
 
-  run-build:
+  check-updates:
     needs: gate
     if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.decide.outputs.proceed }}
+      next_ver_code: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
+    steps:
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: true
+
+      - name: Read last built summary from update branch (build.md)
+        id: last
+        run: |
+          set -e
+          # Default empty if update branch or file not present
+          git fetch origin update:update || true
+          if git show update:build.md >/dev/null 2>&1; then
+            git show update:build.md > last_build.md
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get potential config update from build.sh
+        id: cfg
+        run: |
+          set -e
+          # This mimics your build.yml's "Update config" behavior
+          # If your build.sh prints a JSON config with updated versions, capture it
+          if ./build.sh config.toml --config-update > cfg.json 2>/dev/null; then
+            if [ -s cfg.json ]; then
+              echo "has_cfg=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_cfg=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "has_cfg=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Decide whether to proceed
+        id: decide
+        run: |
+          set -e
+          # Default to proceed on manual runs if no last build found
+          PROCEED="false"
+
+          # If no previous build exists, first run should proceed
+          if [ "${{ steps.last.outputs.found }}" != "true" ]; then
+            echo "No previous build.md found on 'update' branch; proceeding."
+            PROCEED="true"
+          else
+            # If build.sh found config differences, proceed
+            if [ "${{ steps.cfg.outputs.has_cfg }}" = "true" ]; then
+              echo "build.sh reported config updates; proceeding."
+              PROCEED="true"
+            else
+              echo "No config changes detected by build.sh."
+            fi
+          fi
+
+          echo "proceed=${PROCEED}" >> $GITHUB_OUTPUT
+
+      - name: Get next version code (for reuse)
+        id: next_ver_code
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(gh release list -L 1 | awk -F '\t' '{print $3}')
+          if [ -z "$TAG" ]; then TAG=0; fi
+          echo "NEXT_VER_CODE=$((TAG + 1))" >> $GITHUB_OUTPUT
+
+  run-build:
+    needs: [gate, check-updates]
+    if: needs.check-updates.outputs.proceed == 'true'
     permissions: write-all
     uses: ./.github/workflows/build.yml
     with:
