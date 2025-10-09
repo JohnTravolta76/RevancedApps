@@ -1,60 +1,68 @@
 #!/usr/bin/env bash
 
-# Handle --print-latest flag for scheduler version checking  
-if [ "$1" = "--print-latest" ]; then  
-  # This should output the same JSON structure as versions.json (without versionCode)  
-  # Replace the logic below with your actual version discovery mechanism  
-    
-  # Run config-update to get latest versions, then parse the resulting build.md  
-  # Temporarily redirect to avoid polluting stdout  
-  ./build.sh config.toml --config-update >/dev/null 2>&1 || true  
-    
-  # Initialize empty values  
-  GP64=""; GP32=""; MX64=""; MX32=""; YT=""  
-  CLI_REV=""; CLI_INO=""; PATCH_REV=""; PATCH_INO=""  
-    
-  # Parse from build.md if it exists  
-  if [ -f build.md ]; then  
-    GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)  
-    GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)  
-    MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)  
-    MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)  
-    YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)  
-      
-    CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)  
-    CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)  
-      
-    PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)  
-    PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)  
-  fi  
-    
-  # Output JSON to stdout  
-  TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)  
-  cat <<JSON  
-{  
-  "generatedAt": "${TS}",  
-  "apps": {  
-    "GooglePhotos": {  
-      "arm64-v8a": "${GP64}",  
-      "arm-v7a":   "${GP32}"  
-    },  
-    "Music-Extended": {  
-      "arm64-v8a": "${MX64}",  
-      "arm-v7a":   "${MX32}"  
-    },  
-    "YouTube": "${YT}"  
-  },  
-  "cli": {  
-    "revanced": "${CLI_REV}",  
-    "inotia00": "${CLI_INO}"  
-  },  
-  "patches": {  
-    "revanced": "${PATCH_REV}",  
-    "inotia00": "${PATCH_INO}"  
-  }  
-}  
-JSON  
-  exit 0  
+# Handle --print-latest flag for scheduler version checking
+if [ "$1" = "--print-latest" ]; then
+  ./build.sh config.toml --config-update >/dev/null 2>&1 || true
+
+  GP64=""; GP32=""; MX64=""; MX32=""; YT=""
+  CLI_REV=""; CLI_INO=""; PATCH_REV=""; PATCH_INO=""
+
+  if [ -f build.md ]; then
+    GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+    GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+    MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+    MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+    YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+
+    CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
+    CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
+
+    PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
+    PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
+  fi
+
+  TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  cat <<'JSON'
+{
+  "generatedAt": "__TS__",
+  "apps": {
+    "GooglePhotos": {
+      "arm64-v8a": "__GP64__",
+      "arm-v7a":   "__GP32__"
+    },
+    "Music-Extended": {
+      "arm64-v8a": "__MX64__",
+      "arm-v7a":   "__MX32__"
+    },
+    "YouTube": "__YT__"
+  },
+  "cli": {
+    "revanced": "__CLI_REV__",
+    "inotia00": "__CLI_INO__"
+  },
+  "patches": {
+    "revanced": "__PATCH_REV__",
+    "inotia00": "__PATCH_INO__"
+  }
+}
+JSON
+
+  # Replace placeholders with actual values safely
+  sed -e "s/__TS__/${TS}/" \
+      -e "s/__GP64__/${GP64}/" \
+      -e "s/__GP32__/${GP32}/" \
+      -e "s/__MX64__/${MX64}/" \
+      -e "s/__MX32__/${MX32}/" \
+      -e "s/__YT__/${YT}/" \
+      -e "s/__CLI_REV__/${CLI_REV}/" \
+      -e "s/__CLI_INO__/${CLI_INO}/" \
+      -e "s/__PATCH_REV__/${PATCH_REV}/" \
+      -e "s/__PATCH_INO__/${PATCH_INO}/" \
+      > latest.json
+
+  # Print to stdout for the workflow to capture
+  cat latest.json
+  exit 0
 fi
 
 set -euo pipefail
