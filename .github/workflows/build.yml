@@ -1,4 +1,5 @@
 name: Build Modules
+
 on:
   workflow_call:
     inputs:
@@ -6,7 +7,6 @@ on:
         type: boolean
         required: false
         default: true
-
   workflow_dispatch:
 
 jobs:
@@ -76,16 +76,18 @@ jobs:
         run: |
           git checkout -f update || git switch --discard-changes --orphan update
           cp -f build.tmp build.md
+
           get_update_json() {
             echo "{
-            \"version\": \"$1\",
-            \"versionCode\": ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }},
-            \"zipUrl\": \"$2\",
-            \"changelog\": \"https://raw.githubusercontent.com/$GITHUB_REPOSITORY/update/build.md\"
-          }"
+              \"version\": \"$1\",
+              \"versionCode\": ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }},
+              \"zipUrl\": \"$2\",
+              \"changelog\": \"https://raw.githubusercontent.com/$GITHUB_REPOSITORY/update/build.md\"
+            }"
           }
 
           cd build || { echo "build folder not found"; exit 1; }
+
           for OUTPUT in *magisk*.zip; do
             [ "$OUTPUT" = "*magisk*.zip" ] && continue
             ZIP_S=$(unzip -p "$OUTPUT" module.prop)
@@ -96,15 +98,64 @@ jobs:
             DLURL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
             get_update_json "$VER" "$DLURL" >"../$UPDATE_JSON"
           done
-          cd ..
 
+          cd ..
           find . -name "*-update.json" | grep . || : >dummy-update.json
+
+      - name: Write versions.json from build.md
+        run: |
+          set -e
+          # Parse versions and component refs from build.md for deterministic snapshot
+          test -f build.md
+
+          GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+          GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+          MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+          MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+          YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)
+
+          CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
+          CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
+
+          PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
+          PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
+
+          GP64=${GP64:-""}; GP32=${GP32:-""}; MX64=${MX64:-""}; MX32=${MX32:-""}; YT=${YT:-""}
+          CLI_REV=${CLI_REV:-""}; CLI_INO=${CLI_INO:-""}
+          PATCH_REV=${PATCH_REV:-""}; PATCH_INO=${PATCH_INO:-""}
+
+          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          cat > versions.json <<JSON
+          {
+            "generatedAt": "${TS}",
+            "versionCode": ${NEXT_VER_CODE},
+            "apps": {
+              "GooglePhotos": {
+                "arm64-v8a": "${GP64}",
+                "arm-v7a":   "${GP32}"
+              },
+              "Music-Extended": {
+                "arm64-v8a": "${MX64}",
+                "arm-v7a":   "${MX32}"
+              },
+              "YouTube": "${YT}"
+            },
+            "cli": {
+              "revanced": "${CLI_REV}",
+              "inotia00": "${CLI_INO}"
+            },
+            "patches": {
+              "revanced": "${PATCH_REV}",
+              "inotia00": "${PATCH_INO}"
+            }
+          }
+          JSON
 
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: update
           skip_checkout: true
-          file_pattern: build.md *-update.json
+          file_pattern: build.md *-update.json versions.json
           commit_message: Bump version ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
 
       - name: Report to Telegram
@@ -113,7 +164,6 @@ jobs:
         if: env.TG_TOKEN != null
         run: |
           cd build || { echo "build folder not found"; exit 1; }
-
           TG_CHAT="@rvc_magisk"
           NL=$'\n'
           APKS=""
@@ -128,16 +178,12 @@ jobs:
           done
           MODULES=${MODULES#"$NL"}
           APKS=${APKS#"$NL"}
-
           BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
           MSG="*New build!*
-
           ${BODY}
-
           *▼ Download Links:*
           Modules:
           ${MODULES}
-
           APKs:
           ${APKS}
           "
