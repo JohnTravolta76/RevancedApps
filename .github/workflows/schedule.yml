@@ -72,57 +72,18 @@ jobs:
             echo "found_json=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Generate latest snapshot via build.sh (config update)
+      - name: Generate latest.json via build.sh --print-latest
         id: latest
         run: |
           set -e
-          # Try to detect latest versions via your existing mechanism
-          # If this step leaves a build.md, parse it; otherwise fallback to empty strings
-          ./build.sh config.toml --config-update >/dev/null 2>&1 || true
-
-          GP64=""; GP32=""; MX64=""; MX32=""; YT=""
-          CLI_REV=""; CLI_INO=""; PATCH_REV=""; PATCH_INO=""
-
-          if [ -f build.md ]; then
-            GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-            GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-            MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-            MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-            YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-
-            CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-            CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-
-            PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
-            PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
+          # Ensure jq is available for comparison
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update -y && sudo apt-get install -y jq
           fi
-
-          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          cat > latest.json <<JSON
-          {
-            "generatedAt": "${TS}",
-            "apps": {
-              "GooglePhotos": {
-                "arm64-v8a": "${GP64}",
-                "arm-v7a":   "${GP32}"
-              },
-              "Music-Extended": {
-                "arm64-v8a": "${MX64}",
-                "arm-v7a":   "${MX32}"
-              },
-              "YouTube": "${YT}"
-            },
-            "cli": {
-              "revanced": "${CLI_REV}",
-              "inotia00": "${CLI_INO}"
-            },
-            "patches": {
-              "revanced": "${PATCH_REV}",
-              "inotia00": "${PATCH_INO}"
-            }
-          }
-          JSON
-
+          
+          # Call build.sh with --print-latest flag to get machine-readable JSON
+          ./build.sh --print-latest > latest.json
+          
           echo "Latest snapshot:"
           cat latest.json
 
@@ -144,9 +105,37 @@ jobs:
             exit 0
           fi
 
-          # Use jq if available for structured comparison; fallback to text diff
-          if command -v jq >/dev/null 2>&1; then
-            DIFF=$(jq --argfile a last_versions.json --argfile b latest.json -n '
+          # Use jq for structured comparison
+          DIFF=$(jq --argfile a last_versions.json --argfile b latest.json -n '
+            def norm(x): if x == null then "" else x end;
+            def sanitize(obj):
+              {
+                apps: {
+                  GooglePhotos: {
+                    "arm64-v8a": norm(obj.apps.GooglePhotos["arm64-v8a"]),
+                    "arm-v7a":   norm(obj.apps.GooglePhotos["arm-v7a"])
+                  },
+                  "Music-Extended": {
+                    "arm64-v8a": norm(obj.apps["Music-Extended"]["arm64-v8a"]),
+                    "arm-v7a":   norm(obj.apps["Music-Extended"]["arm-v7a"])
+                  },
+                  YouTube: norm(obj.apps.YouTube)
+                },
+                cli: {
+                  revanced: norm(obj.cli.revanced),
+                  inotia00: norm(obj.cli.inotia00)
+                },
+                patches: {
+                  revanced: norm(obj.patches.revanced),
+                  inotia00: norm(obj.patches.inotia00)
+                }
+              }';
+            (sanitize($a) == sanitize($b)) | not
+          ')
+          
+          if [ "$DIFF" = "true" ]; then
+            echo "Detected differences from last build:"
+            jq --argfile a last_versions.json --argfile b latest.json -n '
               def norm(x): if x == null then "" else x end;
               def sanitize(obj):
                 {
@@ -170,23 +159,12 @@ jobs:
                     inotia00: norm(obj.patches.inotia00)
                   }
                 }';
-              (sanitize($a) == sanitize($b)) | not
-            ')
-            if [ "$DIFF" = "true" ]; then
-              echo "Detected differences from last build; proceeding."
-              echo "proceed=true" >> $GITHUB_OUTPUT
-            else
-              echo "No differences; skipping build."
-              echo "proceed=false" >> $GITHUB_OUTPUT
-            fi
+              {last: sanitize($a), latest: sanitize($b)}
+            '
+            echo "proceed=true" >> $GITHUB_OUTPUT
           else
-            if diff -u last_versions.json latest.json >/dev/null 2>&1; then
-              echo "No differences; skipping build."
-              echo "proceed=false" >> $GITHUB_OUTPUT
-            else
-              echo "Detected differences from last build; proceeding."
-              echo "proceed=true" >> $GITHUB_OUTPUT
-            fi
+            echo "No differences; skipping build."
+            echo "proceed=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Get next version code (for reuse)
