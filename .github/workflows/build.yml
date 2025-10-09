@@ -103,6 +103,8 @@ jobs:
           find . -name "*-update.json" | grep . || : >dummy-update.json
 
       - name: Write versions.json from build.md
+        env:
+          NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
         run: |
           set -e
           # Parse versions and component refs from build.md for deterministic snapshot
