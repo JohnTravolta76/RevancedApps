@@ -1,5 +1,5 @@
-GooglePhotos (arm64-v8a): 7.48.0.813334473  
-GooglePhotos (arm-v7a): 7.48.0.813334473  
+GooglePhotos (arm64-v8a): 7.49.0.816946145  
+GooglePhotos (arm-v7a): 7.49.0.816946145  
 Music-Extended (arm64-v8a): 8.30.54  
 Music-Extended (arm-v7a): 8.30.54  
 YouTube: 20.14.43  
@@ -20,6 +20,8 @@ Patches: ReVanced/patches-5.42.1.rvp
 Skipped:  
 Patches: ReVanced/patches-5.42.1.rvp  
 Patches: ReVanced/patches-5.42.1.rvp  
+Patches: ReVanced/patches-5.42.1.rvp  
 Patches: inotia00/patches-5.12.1.rvp  
 Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp          
+Patches: inotia00/patches-5.12.1.rvp  
+Patches: inotia00/patches-5.12.1.rvp            
