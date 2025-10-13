@@ -76,6 +76,60 @@ fi
 
 source utils.sh
 
+# ---------------- GitHub API auth and helpers ----------------  
+# Prefer GITHUB_TOKEN from Actions, fallback to GH_TOKEN if set locally  
+GH_API_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"  
+  
+AUTH_HEADER=()  
+if [ -n "$GH_API_TOKEN" ]; then  
+  AUTH_HEADER=(-H "Authorization: Bearer ${GH_API_TOKEN}")  
+fi  
+UA_HEADER=(-H "User-Agent: revanced-builder")  
+ACCEPT_HEADER=(-H "Accept: application/vnd.github+json")  
+  
+# GET JSON with retries; prints body to stdout, returns 0 on 200  
+gh_api_get() {  
+  local url="$1" attempt=0 body code  
+  while :; do  
+    attempt=$((attempt+1))  
+    # Split body and status code  
+    read -r -d '' body < <(curl -sS -w $'\n%{http_code}' "${AUTH_HEADER[@]}" "${UA_HEADER[@]}" "${ACCEPT_HEADER[@]}" "$url" || true) || true  
+    code="${body##*$'\n'}"  
+    body="${body%$'\n'*}"  
+    if [ "$code" = "200" ]; then  
+      printf '%s' "$body"  
+      return 0  
+    fi  
+    echo "[-] GitHub API ($code): $url (attempt $attempt)" >&2  
+    # Back off a bit; treat 403 specially (rate limit or abuse detection)  
+    if [ "$attempt" -ge 5 ]; then  
+      echo "[-] Request failed: $url" >&2  
+      echo "$body" >&2  
+      return 1  
+    fi  
+    sleep $((attempt*2))  
+  done  
+}  
+  
+# Download a release asset or file via HTTP(S) with retries  
+gh_http_get() {  
+  local url="$1" out="${2:-}"  
+  local attempt=0 rc  
+  while :; do  
+    attempt=$((attempt+1))  
+    if [ -n "$out" ]; then  
+      curl -fL --retry 5 --retry-delay 2 "${AUTH_HEADER[@]}" "${UA_HEADER[@]}" "$url" -o "$out" && return 0  
+    else  
+      curl -fL --retry 5 --retry-delay 2 "${AUTH_HEADER[@]}" "${UA_HEADER[@]}" "$url" && return 0  
+    fi  
+    rc=$?  
+    echo "[-] Download failed (rc=$rc): $url (attempt $attempt)" >&2  
+    [ "$attempt" -ge 5 ] && return "$rc"  
+    sleep $((attempt*2))  
+  done  
+}  
+# ------------------------------------------------------------
+
 jq --version >/dev/null || abort "\`jq\` is not installed. install it with 'apt install jq' or equivalent"
 java --version >/dev/null || abort "\`openjdk 17\` is not installed. install it with 'apt install openjdk-17-jre' or equivalent"
 zip --version >/dev/null || abort "\`zip\` is not installed. install it with 'apt install zip' or equivalent"
