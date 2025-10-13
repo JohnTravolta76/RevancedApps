@@ -74,6 +74,9 @@ jobs:
 
       - name: Generate latest.json via build.sh --print-latest
         id: latest
+        env:  
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           # Ensure jq is available for comparison
