@@ -165,10 +165,10 @@ jobs:
           commit_message: Bump version ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
 
       - name: Report to Telegram
-        if: ${{ secrets.TG_TOKEN != '' }}
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        if: ${{ secrets.TG_TOKEN != '' }}
         run: |  
           set -euo pipefail  
           cd build || { echo "build folder not found"; exit 1; }  
