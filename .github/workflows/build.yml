@@ -172,12 +172,18 @@ jobs:
         run: |  
           set -euo pipefail  
           cd build || { echo "build folder not found"; exit 1; }  
+
+          # Ensure jq (used for JSON ok check)  
+          if ! command -v jq >/dev/null 2>&1; then  
+            sudo apt-get update -y && sudo apt-get install -y jq  
+          fi
         
           POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"  
         
           # Build download lists  
           NL=$'\n'  
-          APKS=""; MODULES=""
+          APKS="" 
+          MODULES=""
           for OUTPUT in *; do  
             DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"  
             if [[ $OUTPUT = *.apk ]]; then  
