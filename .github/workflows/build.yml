@@ -1,14 +1,12 @@
 name: Build Modules
-
-on:
+'on':
   workflow_call:
     inputs:
       from_ci:
         type: boolean
         required: false
         default: true
-  workflow_dispatch:
-
+  workflow_dispatch: null
 jobs:
   run:
     permissions: write-all
@@ -16,20 +14,18 @@ jobs:
     steps:
       - uses: actions/setup-java@v4
         with:
-          distribution: "zulu"
-          java-version: "17"
-
+          distribution: zulu
+          java-version: '17'
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: true
-
       - name: Update config
-        if: ${{ inputs.from_ci }}
-        env:  
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: '${{ inputs.from_ci }}'
+        env:
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         run: |
           if git checkout origin/update build.md; then
             UPDATE_CFG=$(./build.sh config.toml --config-update)
@@ -37,24 +33,23 @@ jobs:
               echo "$UPDATE_CFG" > config.json
             fi
           fi
-
       - name: Get next version code
         id: next_ver_code
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
         run: |
           TAG=$(gh release list -L 1 | awk -F '\t' '{print $3}')
           if [ -z "$TAG" ]; then TAG=0; fi
           echo "NEXT_VER_CODE=$((TAG + 1))" >> $GITHUB_OUTPUT
-
       - name: Build modules/APKs
-        run: if [ -f "config.json" ]; then ./build.sh config.json; else ./build.sh config.toml; fi
+        run: >-
+          if [ -f "config.json" ]; then ./build.sh config.json; else ./build.sh
+          config.toml; fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
+          GH_TOKEN: '${{ secrets.GITHUB_TOKEN }}'
           GITHUB_REPOSITORY: $GITHUB_REPOSITORY
-          NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
-
+          NEXT_VER_CODE: '${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}'
       - name: Get output
         id: get_output
         run: |
@@ -63,18 +58,16 @@ jobs:
           cat build.md >> "$GITHUB_OUTPUT"
           echo "${DELIM}" >> "$GITHUB_OUTPUT"
           cp -f build.md build.tmp
-
       - name: Upload modules to release
         uses: svenstaro/upload-release-action@v2
         with:
-          body: ${{ steps.get_output.outputs.BUILD_LOG }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          body: '${{ steps.get_output.outputs.BUILD_LOG }}'
+          repo_token: '${{ secrets.GITHUB_TOKEN }}'
           file: ./build/*
           release_name: ReVanced
-          tag: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
+          tag: '${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}'
           file_glob: true
           overwrite: true
-
       - name: Update changelog and Magisk update json
         id: update_config
         run: |
@@ -105,33 +98,60 @@ jobs:
 
           cd ..
           find . -name "*-update.json" | grep . || : >dummy-update.json
-
       - name: Write versions.json from build.md
         env:
-          NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
-        run: |
+          NEXT_VER_CODE: '${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}'
+        run: >
           set -e
-          # Parse versions and component refs from build.md for deterministic snapshot
+
+          # Parse versions and component refs from build.md for deterministic
+          snapshot
+
           test -f build.md
 
-          GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)
 
-          CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-          CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
+          GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': '
+          '{print $2}' | head -n1 || true)
 
-          PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
-          PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
+          GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': '
+          '{print $2}' | head -n1 || true)
 
-          GP64=${GP64:-""}; GP32=${GP32:-""}; MX64=${MX64:-""}; MX32=${MX32:-""}; YT=${YT:-""}
+          MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': '
+          '{print $2}' | head -n1 || true)
+
+          MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': '
+          '{print $2}' | head -n1 || true)
+
+          YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1
+          || true)
+
+
+          CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o
+          build.md | sed 's/^CLI:\s*//' || true)
+
+          CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o
+          build.md | sed 's/^CLI:\s*//' || true)
+
+
+          PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o
+          build.md | sed 's/^Patches:\s*//' || true)
+
+          PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o
+          build.md | sed 's/^Patches:\s*//' || true)
+
+
+          GP64=${GP64:-""}; GP32=${GP32:-""}; MX64=${MX64:-""};
+          MX32=${MX32:-""}; YT=${YT:-""}
+
           CLI_REV=${CLI_REV:-""}; CLI_INO=${CLI_INO:-""}
+
           PATCH_REV=${PATCH_REV:-""}; PATCH_INO=${PATCH_INO:-""}
 
+
           TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
           cat > versions.json <<JSON
+
           {
             "generatedAt": "${TS}",
             "versionCode": ${NEXT_VER_CODE},
@@ -155,74 +175,73 @@ jobs:
               "inotia00": "${PATCH_INO}"
             }
           }
-          JSON
 
+          JSON
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: update
           skip_checkout: true
           file_pattern: build.md *-update.json versions.json
-          commit_message: Bump version ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
-
+          commit_message: 'Bump version ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}'
       - name: Report to Telegram
-        if: ${{ secrets.TG_TOKEN != '' }}
+        if: '${{ secrets.TG_TOKEN != '''' }}'
         env:
-            TG_TOKEN: ${{ secrets.TG_TOKEN }}
-            TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}   # set this to 1497136050 (or your channel/group id)
+          TG_TOKEN: '${{ secrets.TG_TOKEN }}'
+          TG_CHAT_ID: '${{ secrets.TG_CHAT_ID }}'
         run: |
-            set -euo pipefail
-            cd build || { echo "build folder not found"; exit 1; }
-        
-            POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
-        
-            # Build download lists
-            NL=$'\n'
-            APKS=""; MODULES=""
-            for OUTPUT in *; do
-              DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
-              if [[ $OUTPUT = *.apk ]]; then
-                APKS+="${NL}${OUTPUT} -> ${DL_URL}"
-              elif [[ $OUTPUT = *.zip ]]; then
-                MODULES+="${NL}${OUTPUT} -> ${DL_URL}"
-              fi
-            done
-            MODULES=${MODULES#"$NL"}
-            APKS=${APKS#"$NL"}
-        
-            # Plain text to avoid parse errors
-            BODY="$(sed 's/[*`_]//g; s/^\s\+-/ -/g; /^==/d;' ../build.md)"
-        
-            MSG="New build!
-            ${BODY}
-        
-            ▼ Download Links:
-            Modules:
-            ${MODULES}
-            
-            APKs:
-            ${APKS}
-            "
-            
-                send_chunk() {
-                  local text="$1"
-                  local http
-                  http=$(curl -sS -o /tmp/tg_resp.json -w "%{http_code}" -X POST \
-                    --data-urlencode "disable_web_page_preview=true" \
-                    --data-urlencode "text=${text}" \
-                    --data-urlencode "chat_id=${TG_CHAT_ID}" \
-                    "$POST" || echo "000")
-                  echo "Telegram HTTP ${http}"
-                  echo "Telegram response:"
-                  cat /tmp/tg_resp.json || true
-                  if [ "$http" != "200" ] || ! jq -e '.ok == true' /tmp/tg_resp.json >/dev/null 2>&1; then
-                    exit 1
-                  fi
-                }
-            
-                max=3900
-                msg="$MSG"
-                while [ ${#msg} -gt $max ]; do
-                  send_chunk "${msg:0:$max}"
-                  msg="${msg:$max}"
-                done
-                [ -n "$msg" ] && send_chunk "$msg"
+          set -euo pipefail
+          cd build || { echo "build folder not found"; exit 1; }
+
+          POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+
+          # Build download lists
+          NL=$'\n'
+          APKS=""; MODULES=""
+          for OUTPUT in *; do
+            DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
+            if [[ $OUTPUT = *.apk ]]; then
+              APKS+="${NL}${OUTPUT} -> ${DL_URL}"
+            elif [[ $OUTPUT = *.zip ]]; then
+              MODULES+="${NL}${OUTPUT} -> ${DL_URL}"
+            fi
+          done
+          MODULES=${MODULES#"$NL"}
+          APKS=${APKS#"$NL"}
+
+          # Plain text to avoid parse errors
+          BODY="$(sed 's/[*`_]//g; s/^\s\+-/ -/g; /^==/d;' ../build.md)"
+
+          MSG="New build!
+          ${BODY}
+
+          ▼ Download Links:
+          Modules:
+          ${MODULES}
+
+          APKs:
+          ${APKS}
+          "
+
+              send_chunk() {
+                local text="$1"
+                local http
+                http=$(curl -sS -o /tmp/tg_resp.json -w "%{http_code}" -X POST \
+                  --data-urlencode "disable_web_page_preview=true" \
+                  --data-urlencode "text=${text}" \
+                  --data-urlencode "chat_id=${TG_CHAT_ID}" \
+                  "$POST" || echo "000")
+                echo "Telegram HTTP ${http}"
+                echo "Telegram response:"
+                cat /tmp/tg_resp.json || true
+                if [ "$http" != "200" ] || ! jq -e '.ok == true' /tmp/tg_resp.json >/dev/null 2>&1; then
+                  exit 1
+                fi
+              }
+
+              max=3900
+              msg="$MSG"
+              while [ ${#msg} -gt $max ]; do
+                send_chunk "${msg:0:$max}"
+                msg="${msg:$max}"
+              done
+              [ -n "$msg" ] && send_chunk "$msg"
