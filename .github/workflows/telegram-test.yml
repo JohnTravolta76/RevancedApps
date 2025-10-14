@@ -1,0 +1,22 @@
+name: Telegram Test
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test message to Telegram
+        if: env.TG_TOKEN != ''
+        env:
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}  # put 1497136050 here as a secret
+        run: |
+          set -euo pipefail
+          POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+          http=$(curl -sS -o /tmp/resp.json -w "%{http_code}" -X POST \
+            --data-urlencode "text=Hello from GitHub Actions" \
+            --data-urlencode "chat_id=${TG_CHAT_ID}" \
+            "$POST" || echo "000")
+          echo "HTTP: $http"
+          cat /tmp/resp.json || true
+          test "$http" = "200"
