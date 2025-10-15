@@ -1,20 +1,20 @@
 {
-  "generatedAt": "2025-10-15T16:35:27Z",
-  "versionCode": 12,
+  "generatedAt": "2025-10-15T18:38:55Z",
+  "versionCode": 13,
   "apps": {
     "GooglePhotos": {
       "arm64-v8a": "7.49.0.816946145  ",
       "arm-v7a":   "7.49.0.816946145  "
     },
     "Music-Extended": {
-      "arm64-v8a": "",
-      "arm-v7a":   ""
+      "arm64-v8a": "8.30.54  ",
+      "arm-v7a":   "8.30.54  "
     },
     "YouTube": "20.14.43  "
   },
   "cli": {
     "revanced": "j-hc/revanced-cli-5.0.0-all.jar",
-    "inotia00": ""
+    "inotia00": "inotia00/revanced-cli-5.0.1-all.jar"
   },
   "patches": {
     "revanced": "ReVanced/patches-5.43.1.rvp",
