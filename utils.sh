@@ -418,11 +418,29 @@ dl_apkmirror() {
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
-		local resp node app_table apkmname dlurl=""
+		local resp node app_table apkmname dlurl="" url_try
 		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
 		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-		url="${url}/${apkmname}-${version//./-}-release/"
-		resp=$(req "$url" -) || return 1
+		
+		url_try="${url}/${apkmname}-${version//./-}-release/"
+		resp=$(req "$url_try" -) || resp=""
+
+		if [ -z "$resp" ]; then
+			_vnorm="${2// /-}"  
+			_vnorm="${_vnorm/-release.0/}"  
+			url_try="${url%/}/${apkmname}-${_vnorm//./-}-release/"  
+			resp=$(req "$url_try" -) || resp=""
+		fi
+		if [ -z "$resp" ]; then
+			_vnorm="${2// /-}"  
+			_vnorm="${_vnorm//-release./.}"  
+			url_try="${url%/}/${apkmname}-${_vnorm//./-}-release/"  
+			resp=$(req "$url_try" -) || resp=""
+		fi
+
+		[ -z "$resp" ] && return 1
+
+		url="$url_try"
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ "$node" ]; then
 			if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "APK"); then
