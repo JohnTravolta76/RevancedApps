@@ -7,6 +7,10 @@ on:
         type: boolean
         required: false
         default: true
+      notify_telegram:
+        type: boolean
+        required: false
+        default: false
   workflow_dispatch:
 
 jobs:
@@ -168,22 +172,17 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
           TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        if: env.TG_TOKEN != ''
+        if: env.TG_TOKEN != null && inputs.notify_telegram == true
         run: |  
           set -euo pipefail  
           cd build || { echo "build folder not found"; exit 1; }  
-
-          # Ensure jq (used for JSON ok check)  
-          if ! command -v jq >/dev/null 2>&1; then  
-            sudo apt-get update -y && sudo apt-get install -y jq  
-          fi
         
-          POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"  
-        
-          # Build download lists  
+          # Build download lists 
+          TG_CHAT="${TG_CHAT_ID}"
           NL=$'\n'  
           APKS="" 
           MODULES=""
+          
           for OUTPUT in *; do  
             DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"  
             if [[ $OUTPUT = *.apk ]]; then  
@@ -195,40 +194,39 @@ jobs:
           MODULES=${MODULES#"$NL"}  
           APKS=${APKS#"$NL"}  
         
-          # Plain text to avoid parse errors  
-          BODY="$(sed 's/[*`_]//g; s/^\s\+-/ -/g; /^==/d;' ../build.md)"  
+          # Prepare body from build.md, convert to Telegram Markdown-friendly  
+          BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"  
         
-          MSG="New build!  
+          MSG="*New build!*"  
           ${BODY}
-          
-          ▼ Download Links:
+          *▼ Download Links:*
           Modules:
-          ${MODULES}
-          
+          ${MODULES}          
           APKs:
           ${APKS}
           "
+
+          # Telegram API  
+          POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
+
+          # Trim to Telegram size limit safety margin  
+          MSG=${MSG:0:9450}
           
-              send_chunk() {  
-                local text="$1"  
-                local http  
-                http=$(curl -sS -o /tmp/tg_resp.json -w "%{http_code}" -X POST \  
-                  --data-urlencode "disable_web_page_preview=true" \  
-                  --data-urlencode "text=${text}" \  
-                  --data-urlencode "chat_id=${TG_CHAT_ID}" \  
-                  "$POST" || echo "000")  
-                echo "Telegram HTTP ${http}"  
-                echo "Telegram response:"  
-                cat /tmp/tg_resp.json || true  
-                if [ "$http" != "200" ] || ! jq -e '.ok == true' /tmp/tg_resp.json >/dev/null 2>&1; then  
-                  exit 1  
-                fi  
-              }  
+          # Send request; keep curl as a single command with all args  
+          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/tg_resp.json \  
+            -X POST \  
+            --data-urlencode "parse_mode=Markdown" \  
+            --data-urlencode "disable_web_page_preview=true" \  
+            --data-urlencode "text=${MSG}" \  
+            --data-urlencode "chat_id=${TG_CHAT}" \  
+            "$POST" || true)
             
-              max=3900  
-              msg="$MSG"  
-              while [ ${#msg} -gt $max ]; do  
-                send_chunk "${msg:0:$max}"  
-                msg="${msg:$max}"  
-              done  
-              [ -n "$msg" ] && send_chunk "$msg"
+          echo "Telegram HTTP ${HTTP_CODE}"  
+          echo "Telegram response:"  
+          cat /tmp/tg_resp.json || true
+
+          # Consider non-2xx a soft failure; do not fail the whole job  
+          case "$HTTP_CODE" in  
+            2*) exit 0 ;;  
+            *)  echo "Warning: Telegram post failed (HTTP ${HTTP_CODE})" ;;  
+          esac
