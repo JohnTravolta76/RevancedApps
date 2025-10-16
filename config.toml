@@ -15,7 +15,7 @@ parallel-jobs = 1
 arch = "both"
 build-mode = "both"
 version = "auto"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube/"
 uptodown-dlurl = "https://youtube.en.uptodown.com/android"
 archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.youtube"
 
@@ -27,7 +27,7 @@ app-name = "Music"
 patches-source = "inotia00/revanced-patches"
 cli-source = "inotia00/revanced-cli"
 rv-brand = "ReVanced Extended"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music/"
 
 [GooglePhotos]
 arch = "both"
