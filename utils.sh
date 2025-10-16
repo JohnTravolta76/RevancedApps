@@ -396,7 +396,7 @@ merge_splits() {
 apk_mirror_search() {
 	local resp="$1" dpi="$2" arch="$3" apk_bundle="$4"
 	local apparch dlurl node app_table row_dpi row_arch row_kind
-	echo "DBG kind='$row_kind' arch='$row_arch' dpi='$row_dpi' want_kind='$apk_bundle' want_arch='${arch}' want_dpi='${dpi}'" >&2
+	
 	if [ "$arch" = all ]; then
 		apparch=(universal noarch 'arm64-v8a + armeabi-v7a')
 	else 
@@ -432,6 +432,7 @@ dl_apkmirror() {
 		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
 		url="${url}/${apkmname}-${version//./-}-release/"
 		resp=$(req "$url" -) || return 1
+		echo "DBG kind='$row_kind' arch='$row_arch' dpi='$row_dpi' want_kind='$apk_bundle' want_arch='${arch}' want_dpi='${dpi}'" >&2
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ "$node" ]; then
 			if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "APK"); then
