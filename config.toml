@@ -12,7 +12,6 @@ parallel-jobs = 1
 # you can use rvmm-config-gen to generate a config
 
 [YouTube]
-enabled = "false"
 arch = "both"
 build-mode = "both"
 version = "auto"
@@ -22,7 +21,6 @@ archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.google.android.y
 
 # https://github.com/j-hc/revanced-magisk-module/issues/554
 [Music-Extended]
-enabled = "false"
 arch = "both"
 build-mode = "both"
 app-name = "Music"
@@ -32,7 +30,6 @@ rv-brand = "ReVanced Extended"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/youtube-music/"
 
 [GooglePhotos]
-enabled = "false"
 arch = "both"
 build-mode = "both"
 version = "latest"
@@ -40,6 +37,7 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos/"
 uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
 
 [Twitter]
+enabled = "false"
 build-mode = "apk"
 version = "latest"
 dpi = "120-640dpi"
