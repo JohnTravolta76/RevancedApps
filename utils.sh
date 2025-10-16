@@ -418,51 +418,11 @@ dl_apkmirror() {
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
-		local resp node app_table apkmname dlurl="" url_try _vnorm base="${url%/}"
+		local resp node app_table apkmname dlurl=""
 		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
 		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-
-		_vnorm="${2// /-}"  
-		cand_versions=(  
-			"${_vnorm}"                                   # DON'T STRIP - raw version with spaces->dashes
-			"${version}"                                  # raw (spaces->-)  
-			"${_vnorm/-release.0/}"                       # strip -release.0  
-			"${_vnorm//-release./.}"                      # replace -release. with .  
-		)
-		
-		resp=""
-
-		for v_try in "${cand_versions[@]}"; do  
-			[ -z "$v_try" ] && continue  
-			# collapse any duplicate dashes that might occur  
-			v_slug="${v_try//./-}"  
-			v_slug="${v_slug//--/-}"  
-  
-			# Try -release/ first (your original behavior)  
-			url_try="${base}/${apkmname}-${v_slug}-release/"  
-			if resp=$(req "$url_try" - 2>/dev/null); then  
-				url="$url_try"  
-				break  
-			fi  
-  
-			# If not found, try -b/ (APKMirror often uses this for Twitter/X)    
-			url_try="${base}/${apkmname}-${v_slug}-b/"    
-			if resp=$(req "$url_try" - 2>/dev/null); then  
-				url="$url_try"  
-				break  
-			fi  
-  
-			# Some listings show a double "0-release-0-release" form; try it too    
-			url_try="${base}/${apkmname}-${v_slug}-0-release-0-release/"    
-			if resp=$(req "$url_try" - 2>/dev/null); then  
-				url="$url_try"  
-				break  
-			fi  
-		done
-
-		[ -z "$resp" ] && return 1
-
-		url="$url_try"
+		url="${url}/${apkmname}-${version//./-}-release/"
+		resp=$(req "$url" -) || return 1
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ "$node" ]; then
 			if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "APK"); then
@@ -670,21 +630,17 @@ build_rv() {
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
 	if [ ! -f "$stock_apk" ]; then
-	  for dl_p in archive apkmirror uptodown; do
-	    [ -z "${args[${dl_p}_dlurl]}" ] && continue
-	    pr "Downloading '${table}' from ${dl_p}"
-	    if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
-	    if dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
-	      break
-	    else
-	      epr "WARN: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
-	    fi
-	  done
-	  # If still not found after trying all sources, just warn and skip this app
-	  if [ ! -f "$stock_apk" ]; then
-	    pr "WARN: Skipping '${table}' — no matching APK variant found across sources"
-	    return 0
-	  fi
+		for dl_p in archive apkmirror uptodown; do
+			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
+			pr "Downloading '${table}' from ${dl_p}"
+			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
+			if ! dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
+				epr "ERROR: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
+				continue
+			fi
+			break
+		done
+		if [ ! -f "$stock_apk" ]; then return 0; fi
 	fi
 	if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
 		abort "apk signature mismatch '$stock_apk': $OP"
