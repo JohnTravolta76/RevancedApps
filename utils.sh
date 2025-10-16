@@ -421,22 +421,40 @@ dl_apkmirror() {
 		local resp node app_table apkmname dlurl="" url_try
 		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
 		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-		
-		url_try="${url}/${apkmname}-${version//./-}-release/"
-		resp=$(req "$url_try" -) || resp=""
 
-		if [ -z "$resp" ]; then
-			_vnorm="${2// /-}"  
-			_vnorm="${_vnorm/-release.0/}"  
-			url_try="${url%/}/${apkmname}-${_vnorm//./-}-release/"  
-			resp=$(req "$url_try" -) || resp=""
-		fi
-		if [ -z "$resp" ]; then
-			_vnorm="${2// /-}"  
-			_vnorm="${_vnorm//-release./.}"  
-			url_try="${url%/}/${apkmname}-${_vnorm//./-}-release/"  
-			resp=$(req "$url_try" -) || resp=""
-		fi
+		_vnorm="${2// /-}"  
+		cand_versions=(  
+			"${version}"                                   # raw (spaces->-)  
+			"${_vnorm/-release.0/}"                       # strip -release.0  
+			"${_vnorm//-release./.}"                      # replace -release. with .  
+		)
+		
+		resp=""
+
+		for v_try in "${cand_versions[@]}"; do  
+			[ -z "$v_try" ] && continue  
+			# collapse any duplicate dashes that might occur  
+			v_slug="${v_try//./-}"  
+			v_slug="${v_slug//--/-}"  
+  
+			# Try -release/ first (your original behavior)  
+			url_try="${base}/${apkmname}-${v_slug}-release/"  
+			resp=$(req "$url_try" -) || resp=""  
+  
+			# If not found, try -b/ (APKMirror often uses this for Twitter/X)  
+			if [ -z "$resp" ]; then  
+				url_try="${base}/${apkmname}-${v_slug}-b/"  
+				resp=$(req "$url_try" -) || resp=""  
+			fi  
+  
+			# Some listings show a double “release-0-release” form; try it too  
+			if [ -z "$resp" ]; then  
+				url_try="${base}/${apkmname}-${v_slug}-release-0-release/"  
+				resp=$(req "$url_try" -) || resp=""  
+			fi  
+  
+			[ -n "$resp" ] && { url="$url_try"; break; }  
+		done
 
 		[ -z "$resp" ] && return 1
 
