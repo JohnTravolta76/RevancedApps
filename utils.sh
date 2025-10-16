@@ -392,7 +392,7 @@ merge_splits() {
 	return $ret
 }
 
-# -------------------- apkmirror --------------------
+# ----------------------------------------
 apk_mirror_search() {
 	local resp="$1" dpi="$2" arch="$3" apk_bundle="$4"
 	local apparch dlurl node app_table
@@ -442,6 +442,9 @@ dl_apkmirror() {
   
 		[ -z "$resp" ] && return 1  
 		url="$url_try"
+
+		echo "apkmirror page: $url" >&2
+		echo "$resp" | $HTMLQ --text "div.table-row.headerFont span" | sed -n '1,24p' >&2
 		
 		resp=$(req "$url" -) || return 1
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
@@ -456,9 +459,6 @@ dl_apkmirror() {
 		fi
 		url=$(echo "$resp" | $HTMLQ --base https://www.apkmirror.com --attribute href "a.btn") || return 1
 		url=$(req "$url" - | $HTMLQ --base https://www.apkmirror.com --attribute href "span > a[rel = nofollow]") || return 1
-
-		echo "apkmirror page: $url" >&2
-		echo "$resp" | $HTMLQ --text "div.table-row.headerFont span" | sed -n '1,24p' >&2
 	fi
 
 	if [ "$is_bundle" = true ]; then
