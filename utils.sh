@@ -424,7 +424,7 @@ dl_apkmirror() {
 
 		_vnorm="${2// /-}"  
 		cand_versions=(  
-			"${version}"                                   # raw (spaces->-)  
+			"${version}"                                  # raw (spaces->-)  
 			"${_vnorm/-release.0/}"                       # strip -release.0  
 			"${_vnorm//-release./.}"                      # replace -release. with .  
 		)
@@ -449,7 +449,7 @@ dl_apkmirror() {
   
 			# Some listings show a double “release-0-release” form; try it too  
 			if [ -z "$resp" ]; then  
-				url_try="${base}/${apkmname}-${v_slug}-release-0-release/"  
+				url_try="${base}/${apkmname}-${v_slug}-0-release-0-release/"  
 				resp=$(req "$url_try" -) || resp=""  
 			fi  
   
