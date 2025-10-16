@@ -212,13 +212,7 @@ jobs:
 
           POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
           
-          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/tg_resp.json \  
-            -X POST \  
-            --data-urlencode "parse_mode=Markdown" \  
-            --data-urlencode "disable_web_page_preview=true" \  
-            --data-urlencode "chat_id=${TG_CHAT}" \  
-            --data-urlencode "text@/tmp/tg_msg_cut.txt" \  
-            "$POST" || true)
+          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/tg_resp.json -X POST --data-urlencode "parse_mode=Markdown" --data-urlencode "disable_web_page_preview=true" --data-urlencode "chat_id=${TG_CHAT}" --data-urlencode "text@/tmp/tg_msg_cut.txt" "$POST" || true)
             
           echo "Telegram HTTP ${HTTP_CODE}"  
           echo "Telegram response:"  
