@@ -418,10 +418,31 @@ dl_apkmirror() {
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
-		local resp node app_table apkmname dlurl=""
+		local resp node app_table apkmname dlurl="" url_try vslug
 		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
 		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-		url="${url}/${apkmname}-${version//./-}-release/"
+
+		vslug="${version//./-}"
+		
+		# 1) Try exact latest download row first on -release-0-release/  
+		url_try="${url}/${apkmname}-${vslug}-release-0-release/${apkmname}-${vslug}-release-0-android-apk-download/"  
+		resp=$(req "$url_try" - 2>/dev/null) || resp=""  
+  
+		# 2) If that failed, try the version page -release-0-release/  
+		if [ -z "$resp" ]; then  
+			url_try="${url}/${apkmname}-${vslug}-release-0-release/"  
+			resp=$(req "$url_try" - 2>/dev/null) || resp=""  
+		fi  
+  
+		# 3) Fallback: old -release/ path  
+		if [ -z "$resp" ]; then  
+			url_try="${url}/${apkmname}-${vslug}-release/"  
+			resp=$(req "$url_try" - 2>/dev/null) || resp=""  
+		fi  
+  
+		[ -z "$resp" ] && return 1  
+		url="$url_try"
+		
 		resp=$(req "$url" -) || return 1
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ "$node" ]; then
