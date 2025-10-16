@@ -396,6 +396,7 @@ merge_splits() {
 apk_mirror_search() {
 	local resp="$1" dpi="$2" arch="$3" apk_bundle="$4"
 	local apparch dlurl node app_table row_dpi row_arch row_kind
+	echo "DBG kind='$row_kind' arch='$row_arch' dpi='$row_dpi' want_kind='$apk_bundle' want_arch='${arch}' want_dpi='${dpi}'" >&2
 	if [ "$arch" = all ]; then
 		apparch=(universal noarch 'arm64-v8a + armeabi-v7a')
 	else 
