@@ -37,11 +37,9 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/google-inc/photos/"
 uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
 
 [Twitter]
-arch = "both"
-build-mode = "both"
-version = "latest"
+build-mode = "apk"
+dpi = "120-640dpi"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/x-corp/twitter"
-archive-dlurl = "https://archive.org/download/jhc-apks/apks/com.twitter.android"
 
 [Spotify]
 enabled = false
