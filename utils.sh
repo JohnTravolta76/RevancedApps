@@ -365,25 +365,6 @@ isoneof() {
 	return 1
 }
 
-is_64_only_app() {  
-  case "$1" in  
-    GooglePhotos|Twitter|X|YouTubeMusic) return 0 ;;  
-    *) return 1 ;;  
-  esac  
-}
-
-normalize_versions() {  
-  v="$1"  
-  printf "%s\n" \  
-    "$v" \  
-    "${v#v}" \  
-    "${v//-release./.}" \  
-    "${v/-release.0/}" \  
-    "${v/ release/.}" \  
-    "${v// /}" \  
-    "${v%.0}.1"  # sometimes .0 → .1 on mirrors  
-}
-
 merge_splits() {
 	local bundle=$1 output=$2
 	pr "Merging splits"
@@ -432,49 +413,36 @@ apk_mirror_search() {
 	return 1
 }
 dl_apkmirror() {
-  local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5 is_bundle=false get_latest_ver=$6
+	local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5 is_bundle=false
+	if [ -f "${output}.apkm" ]; then
+		is_bundle=true
+	else
+		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
+		local resp node app_table apkmname dlurl=""
+		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
+		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
+		url="${url}/${apkmname}-${version//./-}-release/"
+		resp=$(req "$url" -) || return 1
+		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
+		if [ "$node" ]; then
+			if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "APK"); then
+				if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "BUNDLE"); then
+					return 1
+				else is_bundle=true; fi
+			fi
+			[ -z "$dlurl" ] && return 1
+			resp=$(req "$dlurl" -)
+		fi
+		url=$(echo "$resp" | $HTMLQ --base https://www.apkmirror.com --attribute href "a.btn") || return 1
+		url=$(req "$url" - | $HTMLQ --base https://www.apkmirror.com --attribute href "span > a[rel = nofollow]") || return 1
+	fi
 
-  if [ -f "${output}.apkm" ]; then
-    is_bundle=true
-  else
-    local arch_q="$arch"
-    [ "$arch_q" = "arm-v7a" ] && arch_q="armeabi-v7a"
-
-    local resp node apkmname dlurl=""
-    apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
-    apkmname="${apkmname,,}"; apkmname="${apkmname// /-}"; apkmname="${apkmname//[^a-z0-9-]/}"
-
-    local url_try
-    for v_try in $(normalize_versions "$2"); do
-      url_try="${1}/${apkmname}-${v_try//./-}-release/"
-      resp=$(req "$url_try" -) || continue
-
-      node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp") || true
-      if [ "$node" ]; then
-        for dpi_try in "$dpi" universal noarch; do
-          if dlurl=$(apk_mirror_search "$resp" "$dpi_try" "$arch_q" "APK"); then break; fi
-          if dlurl=$(apk_mirror_search "$resp" "$dpi_try" "$arch_q" "BUNDLE"); then is_bundle=true; break; fi
-        done
-        if [ -n "$dlurl" ]; then
-          resp=$(req "$dlurl" -) || return 1
-          url="$url_try"
-          break
-        fi
-      fi
-    done
-
-    [ -z "$dlurl" ] && return 1
-
-    url=$(echo "$resp" | $HTMLQ --base https://www.apkmirror.com --attribute href "a.btn") || return 1
-    url=$(req "$url" - | $HTMLQ --base https://www.apkmirror.com --attribute href "span > a[rel = nofollow]") || return 1
-  fi
-
-  if [ "$is_bundle" = true ]; then
-    req "$url" "${output}.apkm" || return 1
-    merge_splits "${output}.apkm" "${output}"
-  else
-    req "$url" "${output}" || return 1
-  fi
+	if [ "$is_bundle" = true ]; then
+		req "$url" "${output}.apkm" || return 1
+		merge_splits "${output}.apkm" "${output}"
+	else
+		req "$url" "${output}" || return 1
+	fi
 }
 get_apkmirror_vers() {
 	local vers apkm_resp
@@ -553,15 +521,11 @@ dl_uptodown() {
 get_uptodown_pkg_name() { $HTMLQ --text "tr.full:nth-child(1) > td:nth-child(3)" <<<"$__UPTODOWN_RESP_PKG__"; }
 
 # -------------------- archive --------------------
-dl_archive() {  
-  local url=$1 version=$2 output=$3 arch=$4  
-  local path v  
-  for v in $(normalize_versions "$version"); do  
-    path=$(grep "${v#v}-${arch// /}" <<<"$__ARCHIVE_RESP__" || true)  
-    [ -n "$path" ] && break  
-  done  
-  [ -z "$path" ] && return 1  
-  req "${url}/${path}" "$output"  
+dl_archive() {
+	local url=$1 version=$2 output=$3 arch=$4
+	local path version=${version// /}
+	path=$(grep "${version_f#v}-${arch// /}" <<<"$__ARCHIVE_RESP__") || return 1
+	req "${url}/${path}" "$output"
 }
 get_archive_resp() {
 	local r
@@ -665,27 +629,23 @@ build_rv() {
 	local version_f=${version// /}
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
-	if [ "$arch" = "arm-v7a" ] && is_64_only_app "$table"; then  
-	  pr "INFO: ${table} is 64-bit only; skipping arm-v7a for version '${version}'"  
-	  return 0  
-	fi  
-	  
-	if [ ! -f "$stock_apk" ]; then  
-	  local got=""  
-	  for dl_p in archive apkmirror uptodown; do  
-	    [ -z "${args[${dl_p}_dlurl]}" ] && continue  
-	    pr "Downloading '${table}' from ${dl_p}"  
-	    if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi  
-	    if dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then  
-	      got="yes"  
-	      break  
-	    else  
-	      epr "WARN: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}' — trying next source"  
-	    fi  
-	  done  
-	  [ -z "$got" ] && { pr "INFO: Skipping ${table} — no matching variant found"; return 0; }  
+	if [ ! -f "$stock_apk" ]; then
+	  for dl_p in archive apkmirror uptodown; do
+	    [ -z "${args[${dl_p}_dlurl]}" ] && continue
+	    pr "Downloading '${table}' from ${dl_p}"
+	    if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
+	    if dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
+	      break
+	    else
+	      epr "WARN: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
+	    fi
+	  done
+	  # If still not found after trying all sources, just warn and skip this app
+	  if [ ! -f "$stock_apk" ]; then
+	    pr "WARN: Skipping '${table}' — no matching APK variant found across sources"
+	    return 0
+	  fi
 	fi
-	
 	if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
 		abort "apk signature mismatch '$stock_apk': $OP"
 	fi
