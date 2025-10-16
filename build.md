@@ -1,5 +1,5 @@
-GooglePhotos (arm64-v8a): 7.49.0.816946145  
-GooglePhotos (arm-v7a): 7.49.0.816946145  
+GooglePhotos (arm64-v8a): 7.50.0.818774663  
+GooglePhotos (arm-v7a): 7.50.0.818774663  
 Music-Extended (arm64-v8a): 8.30.54  
 Music-Extended (arm-v7a): 8.30.54  
 YouTube: 20.14.43  
@@ -16,13 +16,3 @@ Patches: inotia00/patches-5.12.1.rvp
 CLI: j-hc/revanced-cli-5.0.0-all.jar  
 Patches: ReVanced/patches-5.43.1.rvp  
 [Changelog](https://github.com/ReVanced/revanced-patches/releases/tag/v5.43.1)  
-
-Skipped:  
-Patches: ReVanced/patches-5.43.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp  
-Patches: inotia00/patches-5.12.1.rvp                      
