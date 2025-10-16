@@ -184,3 +184,4 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       from_ci: true
+      notify_telegram: true
