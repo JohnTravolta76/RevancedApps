@@ -409,7 +409,7 @@ apk_mirror_search() {
     row_arch=$(sed -n 4p <<<"$app_table")  
     row_dpi=$(sed -n 6p <<<"$app_table")  
   
-    # For APK rows, require exact DPI. For BUNDLE rows, accept any DPI.  
+    # Accept any DPI for BUNDLE. Keep exact match for APK.  
     if [ "$row_kind" = "$apk_bundle" ] \  
        && isoneof "$row_arch" "${apparch[@]}" \  
        && { [ "$apk_bundle" = "BUNDLE" ] || [ "$row_dpi" = "$dpi" ]; }; then  
@@ -434,9 +434,11 @@ dl_apkmirror() {
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
 		if [ "$node" ]; then
 			if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "APK"); then
-				if ! dlurl=$(apk_mirror_search "$resp" "$dpi" "${arch}" "BUNDLE"); then
+				if ! dlurl=$(apk_mirror_search "$resp" "" "${arch}" "BUNDLE"); then
 					return 1
-				else is_bundle=true; fi
+				else 
+					is_bundle=true; 
+				fi
 			fi
 			[ -z "$dlurl" ] && return 1
 			resp=$(req "$dlurl" -)
