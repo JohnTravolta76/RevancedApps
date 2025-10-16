@@ -414,25 +414,36 @@ apk_mirror_search() {
   
     # Accept any DPI for BUNDLE. Keep exact match for APK.  
     if [ "$row_kind" = "$apk_bundle" ] \  
-       && isoneof "$row_arch" "${apparch[@]}" \  
-       && { [ "$apk_bundle" = "BUNDLE" ] || [ -z "$dpi" ] || [ "$row_dpi" = "$dpi" ]; }; 
-      dlurl=$($HTMLQ --base https://www.apkmirror.com --attribute href "div:nth-child(1) > a:nth-child(1)" <<<"$node")  
-      echo "$dlurl"  
-      return 0  
-    fi  
+	   && isoneof "$row_arch" "${apparch[@]}" \  
+	   && { [ "$apk_bundle" = "BUNDLE" ] || [ -z "$dpi" ] || [ "$row_dpi" = "$dpi" ]; }; then  
+	  dlurl=$($HTMLQ --base https://www.apkmirror.com --attribute href "div:nth-child(1) > a:nth-child(1)" <<<"$node")  
+	  echo "$dlurl"  
+	  return 0  
+	fi
   done  
   return 1  
 }
 dl_apkmirror() {
 	local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5 is_bundle=false
+	>&2 echo "DBG: dl_apkmirror enter version='$version' arch='$arch' dpi='$dpi' base_url='$url'"
 	if [ -f "${output}.apkm" ]; then
 		is_bundle=true
 	else
 		if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
 		local resp node app_table apkmname dlurl=""
-		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")
-		apkmname="${apkmname,,}" apkmname="${apkmname// /-}" apkmname="${apkmname//[^a-z0-9-]/}"
-		url="${url}/${apkmname}-${version//./-}-release/"
+		
+		apkmname=$($HTMLQ "h1.marginZero" --text <<<"$__APKMIRROR_RESP__")  
+		apkmname="${apkmname,,}"; apkmname="${apkmname// /-}"; apkmname="${apkmname//[^a-z0-9-]/}"  
+		detail_url="${url}/${apkmname}-${version//./-}-release/"
+
+		# Try detail page; if it fails, fall back to the listing page  
+		resp=$(req "$detail_url" -) || resp="$__APKMIRROR_RESP__"
+
+		# Normalize DPI: treat "nodpi" as wildcard  
+		local match_dpi="$dpi"  
+		[ "$match_dpi" = "nodpi" ] && match_dpi=""
+
+		>&2 echo "DBG: dl_apkmirror no match for version='$version' arch='$arch' (APK or BUNDLE)"
 		resp=$(req "$url" -) || return 1
 		echo "DBG entering dl_apkmirror: version='$version' arch='$arch' dpi='$dpi' url='$url'" >&2
 		node=$($HTMLQ "div.table-row.headerFont:nth-last-child(1)" -r "span:nth-child(n+3)" <<<"$resp")
