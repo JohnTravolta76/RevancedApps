@@ -456,6 +456,9 @@ dl_apkmirror() {
 		fi
 		url=$(echo "$resp" | $HTMLQ --base https://www.apkmirror.com --attribute href "a.btn") || return 1
 		url=$(req "$url" - | $HTMLQ --base https://www.apkmirror.com --attribute href "span > a[rel = nofollow]") || return 1
+
+		echo "apkmirror page: $url" >&2
+		echo "$resp" | $HTMLQ --text "div.table-row.headerFont span" | sed -n '1,24p' >&2
 	fi
 
 	if [ "$is_bundle" = true ]; then
