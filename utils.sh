@@ -403,7 +403,9 @@ apk_mirror_search() {
 		apparch=("$arch" universal noarch 'arm64-v8a + armeabi-v7a');
 	fi
 	for ((n = 1; n < 40; n++)); do  
-    node=$($HTMLQ "div.table-row.headerFont:nth-last-child($n)" -r "span:nth-child(n+3)" <<<"$resp")  
+    node=$($HTMLQ "div.table-row.headerFont:nth-last-child($n)" -r "span:nth-child(n+3)" <<<"$resp") 
+	echo "DBG dump first headerFont row:" >&2  
+	echo "$node" >&2
     [ -z "$node" ] && break  
     app_table=$($HTMLQ --text --ignore-whitespace <<<"$node")  
     row_kind=$(sed -n 3p <<<"$app_table")  
