@@ -395,22 +395,30 @@ merge_splits() {
 # -------------------- apkmirror --------------------
 apk_mirror_search() {
 	local resp="$1" dpi="$2" arch="$3" apk_bundle="$4"
-	local apparch dlurl node app_table
+	local apparch dlurl node app_table row_dpi row_arch row_kind
 	if [ "$arch" = all ]; then
 		apparch=(universal noarch 'arm64-v8a + armeabi-v7a')
-	else apparch=("$arch" universal noarch 'arm64-v8a + armeabi-v7a'); fi
-	for ((n = 1; n < 40; n++)); do
-		node=$($HTMLQ "div.table-row.headerFont:nth-last-child($n)" -r "span:nth-child(n+3)" <<<"$resp")
-		if [ -z "$node" ]; then break; fi
-		app_table=$($HTMLQ --text --ignore-whitespace <<<"$node")
-		if [ "$(sed -n 3p <<<"$app_table")" = "$apk_bundle" ] && [ "$(sed -n 6p <<<"$app_table")" = "$dpi" ] &&
-			isoneof "$(sed -n 4p <<<"$app_table")" "${apparch[@]}"; then
-			dlurl=$($HTMLQ --base https://www.apkmirror.com --attribute href "div:nth-child(1) > a:nth-child(1)" <<<"$node")
-			echo "$dlurl"
-			return 0
-		fi
-	done
-	return 1
+	else 
+		apparch=("$arch" universal noarch 'arm64-v8a + armeabi-v7a');
+	fi
+	for ((n = 1; n < 40; n++)); do  
+    node=$($HTMLQ "div.table-row.headerFont:nth-last-child($n)" -r "span:nth-child(n+3)" <<<"$resp")  
+    [ -z "$node" ] && break  
+    app_table=$($HTMLQ --text --ignore-whitespace <<<"$node")  
+    row_kind=$(sed -n 3p <<<"$app_table")  
+    row_arch=$(sed -n 4p <<<"$app_table")  
+    row_dpi=$(sed -n 6p <<<"$app_table")  
+  
+    # For APK rows, require exact DPI. For BUNDLE rows, accept any DPI.  
+    if [ "$row_kind" = "$apk_bundle" ] \  
+       && isoneof "$row_arch" "${apparch[@]}" \  
+       && { [ "$apk_bundle" = "BUNDLE" ] || [ "$row_dpi" = "$dpi" ]; }; then  
+      dlurl=$($HTMLQ --base https://www.apkmirror.com --attribute href "div:nth-child(1) > a:nth-child(1)" <<<"$node")  
+      echo "$dlurl"  
+      return 0  
+    fi  
+  done  
+  return 1  
 }
 dl_apkmirror() {
 	local url=$1 version=${2// /-} output=$3 arch=$4 dpi=$5 is_bundle=false
