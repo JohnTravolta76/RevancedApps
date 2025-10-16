@@ -424,6 +424,7 @@ dl_apkmirror() {
 
 		_vnorm="${2// /-}"  
 		cand_versions=(  
+			"${_vnorm}"                                   # DON'T STRIP - raw version with spaces->dashes
 			"${version}"                                  # raw (spaces->-)  
 			"${_vnorm/-release.0/}"                       # strip -release.0  
 			"${_vnorm//-release./.}"                      # replace -release. with .  
@@ -439,21 +440,24 @@ dl_apkmirror() {
   
 			# Try -release/ first (your original behavior)  
 			url_try="${base}/${apkmname}-${v_slug}-release/"  
-			resp=$(req "$url_try" -) || resp=""  
-  
-			# If not found, try -b/ (APKMirror often uses this for Twitter/X)  
-			if [ -z "$resp" ]; then  
-				url_try="${base}/${apkmname}-${v_slug}-b/"  
-				resp=$(req "$url_try" -) || resp=""  
+			if resp=$(req "$url_try" - 2>/dev/null); then  
+				url="$url_try"  
+				break  
 			fi  
   
-			# Some listings show a double “release-0-release” form; try it too  
-			if [ -z "$resp" ]; then  
-				url_try="${base}/${apkmname}-${v_slug}-0-release-0-release/"  
-				resp=$(req "$url_try" -) || resp=""  
+			# If not found, try -b/ (APKMirror often uses this for Twitter/X)    
+			url_try="${base}/${apkmname}-${v_slug}-b/"    
+			if resp=$(req "$url_try" - 2>/dev/null); then  
+				url="$url_try"  
+				break  
 			fi  
   
-			[ -n "$resp" ] && { url="$url_try"; break; }  
+			# Some listings show a double "0-release-0-release" form; try it too    
+			url_try="${base}/${apkmname}-${v_slug}-0-release-0-release/"    
+			if resp=$(req "$url_try" - 2>/dev/null); then  
+				url="$url_try"  
+				break  
+			fi  
 		done
 
 		[ -z "$resp" ] && return 1
