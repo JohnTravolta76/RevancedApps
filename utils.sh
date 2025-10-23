@@ -7,7 +7,6 @@ BIN_DIR="bin"
 BUILD_DIR="build"
 
 if [ "${GITHUB_TOKEN-}" ]; then GH_HEADER="Authorization: token ${GITHUB_TOKEN}"; else GH_HEADER=; fi
-if [ "${GH_TOKEN-}" ] && [ -z "${GITHUB_TOKEN-}" ]; then GH_HEADER="Authorization: token ${GH_TOKEN}"; fi
 NEXT_VER_CODE=${NEXT_VER_CODE:-$(date +'%Y%m%d')}
 OS=$(uname -o)
 
@@ -68,7 +67,7 @@ get_rv_prebuilts() {
 		if [ "$ver" = "dev" ]; then
 			local resp
 			resp=$(gh_req "$rv_rel" -) || return 1
-			ver=$(jq -e -r '.[] | .tag_name' <<<"$resp" | get_highest_ver) || return 1;
+			ver=$(jq -e -r '.[] | .tag_name' <<<"$resp" | get_highest_ver) || return 1
 		fi
 		if [ "$ver" = "latest" ]; then
 			rv_rel+="/latest"
@@ -206,112 +205,11 @@ _req() {
 	fi
 }
 req() { _req "$1" "$2" -H "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:108.0) Gecko/20100101 Firefox/108.0"; }
-
-gh_req() {
-	local url="$1" output="$2"
-	local tries=0 max_tries=5 resp http_code sleep_time
-	
-	while [ $tries -lt $max_tries ]; do
-		if [ -n "$GH_HEADER" ]; then
-			resp=$(curl -w "\n%{http_code}" -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" \
-				--connect-timeout 10 --retry 0 -s -S \
-				-H "$GH_HEADER" \
-				-H "Accept: application/vnd.github+json" \
-				-H "X-GitHub-Api-Version: 2022-11-28" \
-				"$url" 2>&1) || true
-		else
-			resp=$(curl -w "\n%{http_code}" -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" \
-				--connect-timeout 10 --retry 0 -s -S \
-				-H "Accept: application/vnd.github+json" \
-				-H "X-GitHub-Api-Version: 2022-11-28" \
-				"$url" 2>&1) || true
-		fi
-		
-		http_code=$(tail -n1 <<<"$resp")
-		resp=$(sed '$d' <<<"$resp")
-		
-		# Success
-		if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
-			if [ "$output" = "-" ]; then
-				echo "$resp"
-			else
-				echo "$resp" > "$output"
-			fi
-			return 0
-		fi
-		
-		# Check for rate limit or other retryable errors
-		if [ "$http_code" = "403" ] || [ "$http_code" = "429" ] || [ "$http_code" = "500" ] || [ "$http_code" = "502" ] || [ "$http_code" = "503" ]; then
-			tries=$((tries + 1))
-			if [ $tries -ge $max_tries ]; then
-				epr "GitHub API request failed after $max_tries attempts: $url (HTTP $http_code)"
-				if echo "$resp" | jq -e '.message' >/dev/null 2>&1; then
-					epr "Error: $(echo "$resp" | jq -r '.message')"
-				fi
-				return 1
-			fi
-			sleep_time=$((tries * 3))
-			epr "GitHub API rate limit or error (HTTP $http_code), retrying in ${sleep_time}s... (attempt $tries/$max_tries)"
-			sleep $sleep_time
-		else
-			epr "GitHub API request failed: $url (HTTP $http_code)"
-			if echo "$resp" | jq -e '.message' >/dev/null 2>&1; then
-				epr "Error: $(echo "$resp" | jq -r '.message')"
-			fi
-			return 1
-		fi
-	done
-	
-	return 1
-}
-
+gh_req() { _req "$1" "$2" -H "$GH_HEADER"; }
 gh_dl() {
 	if [ ! -f "$1" ]; then
 		pr "Getting '$1' from '$2'"
-		local tries=0 max_tries=5 http_code sleep_time
-		local dlp="$(dirname "$1")/tmp.$(basename "$1")"
-		
-		while [ $tries -lt $max_tries ]; do
-			if [ -n "$GH_HEADER" ]; then
-				http_code=$(curl -w "%{http_code}" -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" \
-					--connect-timeout 10 --retry 0 -s -S \
-					-H "$GH_HEADER" \
-					-H "Accept: application/octet-stream" \
-					-H "X-GitHub-Api-Version: 2022-11-28" \
-					-o "$dlp" "$2" 2>&1) || true
-			else
-				http_code=$(curl -w "%{http_code}" -L -c "$TEMP_DIR/cookie.txt" -b "$TEMP_DIR/cookie.txt" \
-					--connect-timeout 10 --retry 0 -s -S \
-					-H "Accept: application/octet-stream" \
-					-H "X-GitHub-Api-Version: 2022-11-28" \
-					-o "$dlp" "$2" 2>&1) || true
-			fi
-			
-			# Success
-			if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
-				mv -f "$dlp" "$1"
-				return 0
-			fi
-			
-			# Retry on rate limit or server errors
-			if [ "$http_code" = "403" ] || [ "$http_code" = "429" ] || [ "$http_code" = "500" ] || [ "$http_code" = "502" ] || [ "$http_code" = "503" ]; then
-				tries=$((tries + 1))
-				rm -f "$dlp" 2>/dev/null || true
-				if [ $tries -ge $max_tries ]; then
-					epr "GitHub download failed after $max_tries attempts: $2 (HTTP $http_code)"
-					return 1
-				fi
-				sleep_time=$((tries * 3))
-				epr "GitHub download rate limit or error (HTTP $http_code), retrying in ${sleep_time}s... (attempt $tries/$max_tries)"
-				sleep $sleep_time
-			else
-				rm -f "$dlp" 2>/dev/null || true
-				epr "GitHub download failed: $2 (HTTP $http_code)"
-				return 1
-			fi
-		done
-		
-		return 1
+		_req "$2" "$1" -H "$GH_HEADER" -H "Accept: application/octet-stream"
 	fi
 }
 
@@ -493,9 +391,9 @@ dl_uptodown() {
 		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi
 	done
 	if [ -z "$versionURL" ]; then return 1; fi
- 	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
+	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
 	resp=$(req "$versionURL" -) || return 1
- 	
+
 	local data_version files node_arch data_file_id
 	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || return 1
 	if [ "$data_version" ]; then
@@ -554,6 +452,7 @@ check_sig() {
 	local sig
 	if grep -q "$pkg_name" sig.txt; then
 		sig=$(java -jar "$APKSIGNER" verify --print-certs "$file" | grep ^Signer | grep SHA-256 | tail -1 | awk '{print $NF}')
+		echo "$pkg_name signature: ${sig}"
 		grep -qFx "$sig $pkg_name" sig.txt
 	fi
 }
@@ -643,7 +542,8 @@ build_rv() {
 		if [ ! -f "$stock_apk" ]; then return 0; fi
 	fi
 	if ! OP=$(check_sig "$stock_apk" "$pkg_name" 2>&1) && ! grep -qFx "ERROR: Missing META-INF/MANIFEST.MF" <<<"$OP"; then
-		abort "apk signature mismatch '$stock_apk': $OP"
+		epr "$pkg_name not building, apk signature mismatch '$stock_apk': $OP"
+		return 0
 	fi
 	log "${table}: ${version}"
 
