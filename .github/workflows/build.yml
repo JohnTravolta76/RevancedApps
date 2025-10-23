@@ -7,16 +7,7 @@ on:
         type: boolean
         required: false
         default: true
-      notify_telegram:
-        type: boolean
-        required: false
-        default: false
   workflow_dispatch:
-    inputs:
-      notify_telegram:
-        description: "Send Telegram Notification"
-        type: boolean
-        default: true
 
 jobs:
   run:
@@ -36,9 +27,6 @@ jobs:
 
       - name: Update config
         if: ${{ inputs.from_ci }}
-        env:  
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if git checkout origin/update build.md; then
             UPDATE_CFG=$(./build.sh config.toml --config-update)
@@ -60,7 +48,6 @@ jobs:
         run: if [ -f "config.json" ]; then ./build.sh config.json; else ./build.sh config.toml; fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: $GITHUB_REPOSITORY
           NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
 
@@ -115,110 +102,48 @@ jobs:
           cd ..
           find . -name "*-update.json" | grep . || : >dummy-update.json
 
-      - name: Write versions.json from build.md
-        env:
-          NEXT_VER_CODE: ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
-        run: |
-          set -e
-          # Parse versions and component refs from build.md for deterministic snapshot
-          test -f build.md
-
-          GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-          YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-
-          CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-          CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-
-          PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
-          PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
-
-          GP64=${GP64:-""}; GP32=${GP32:-""}; MX64=${MX64:-""}; MX32=${MX32:-""}; YT=${YT:-""}
-          CLI_REV=${CLI_REV:-""}; CLI_INO=${CLI_INO:-""}
-          PATCH_REV=${PATCH_REV:-""}; PATCH_INO=${PATCH_INO:-""}
-
-          TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          cat > versions.json <<JSON
-          {
-            "generatedAt": "${TS}",
-            "versionCode": ${NEXT_VER_CODE},
-            "apps": {
-              "GooglePhotos": {
-                "arm64-v8a": "${GP64}",
-                "arm-v7a":   "${GP32}"
-              },
-              "Music-Extended": {
-                "arm64-v8a": "${MX64}",
-                "arm-v7a":   "${MX32}"
-              },
-              "YouTube": "${YT}"
-            },
-            "cli": {
-              "revanced": "${CLI_REV}",
-              "inotia00": "${CLI_INO}"
-            },
-            "patches": {
-              "revanced": "${PATCH_REV}",
-              "inotia00": "${PATCH_INO}"
-            }
-          }
-          JSON
-
       - uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: update
           skip_checkout: true
-          file_pattern: build.md *-update.json versions.json
+          file_pattern: build.md *-update.json
           commit_message: Bump version ${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}
 
       - name: Report to Telegram
         env:
           TG_TOKEN: ${{ secrets.TG_TOKEN }}
-          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
-        if: env.TG_TOKEN != null && inputs.notify_telegram == true
-        run: |  
-          set -euo pipefail  
-          cd build || { echo "build folder not found"; exit 1; }  
-          
-          TG_CHAT="${TG_CHAT_ID}"
-          NL=$'\n'  
-          APKS="" 
+        if: env.TG_TOKEN != null
+        run: |
+          cd build || { echo "build folder not found"; exit 1; }
+
+          TG_CHAT="@rvc_magisk"
+          NL=$'\n'
+          APKS=""
           MODULES=""
-          
-          for OUTPUT in *; do  
-            DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"  
-            if [[ $OUTPUT = *.apk ]]; then  
-              APKS+="${NL}${OUTPUT} -> ${DL_URL}"  
-            elif [[ $OUTPUT = *.zip ]]; then  
-              MODULES+="${NL}${OUTPUT} -> ${DL_URL}"  
-            fi  
-          done  
-          MODULES=${MODULES#"$NL"}  
-          APKS=${APKS#"$NL"}  
-          
-          BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"  
-          
-          {  
-            printf '*New build!*\n'  
-            printf '%s\n' "${BODY}"  
-            printf '*▼ Download Links:*\n'  
-            printf 'Modules:\n%s\n' "${MODULES}"  
-            printf 'APKs:\n%s\n' "${APKS}"  
-          } > /tmp/tg_msg.txt
+          for OUTPUT in *; do
+            DL_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/${{ steps.next_ver_code.outputs.NEXT_VER_CODE }}/${OUTPUT}"
+            if [[ $OUTPUT = *.apk ]]; then
+              APKS+="${NL}📦[${OUTPUT}](${DL_URL})"
+            elif [[ $OUTPUT = *.zip ]]; then
+              MODULES+="${NL}📦[${OUTPUT}](${DL_URL})"
+            fi
+          done
+          MODULES=${MODULES#"$NL"}
+          APKS=${APKS#"$NL"}
 
-          head -c 9450 /tmp/tg_msg.txt > /tmp/tg_msg_cut.txt
+          BODY="$(sed 's/^\* \*\*/↪ \*\*/g; s/^\* `/↪ \*\*/g; s/`/\*/g; s/^\* /\↪/g; s/\*\*/\*/g; s/###//g; s/^- /↪ /g; /^==/d;' ../build.md)"
+          MSG="*New build!*
 
+          ${BODY}
+
+          *▼ Download Links:*
+          Modules:
+          ${MODULES}
+
+          APKs:
+          ${APKS}
+          "
+          echo "'$MSG'"
+          MSG=${MSG:0:9450}
           POST="https://api.telegram.org/bot${TG_TOKEN}/sendMessage"
-          
-          HTTP_CODE=$(curl -sS -w "%{http_code}" -o /tmp/tg_resp.json -X POST --data-urlencode "parse_mode=Markdown" --data-urlencode "disable_web_page_preview=true" --data-urlencode "chat_id=${TG_CHAT}" --data-urlencode "text@/tmp/tg_msg_cut.txt" "$POST" || true)
-            
-          echo "Telegram HTTP ${HTTP_CODE}"  
-          echo "Telegram response:"  
-          cat /tmp/tg_resp.json || true
-          
-          case "$HTTP_CODE" in  
-            2*) exit 0 ;;  
-            *)  echo "Warning: Telegram post failed (HTTP ${HTTP_CODE})" ;;  
-          esac
+          curl -X POST --data-urlencode "parse_mode=Markdown" --data-urlencode "disable_web_page_preview=true" --data-urlencode "text=${MSG}" --data-urlencode "chat_id=${TG_CHAT}" "$POST"
