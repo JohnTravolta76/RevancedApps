@@ -1,70 +1,5 @@
 #!/usr/bin/env bash
 
-# Handle --print-latest flag for scheduler version checking
-if [ "$1" = "--print-latest" ]; then
-  ./build.sh config.toml --config-update >/dev/null 2>&1 || true
-
-  GP64=""; GP32=""; MX64=""; MX32=""; YT=""
-  CLI_REV=""; CLI_INO=""; PATCH_REV=""; PATCH_INO=""
-
-  if [ -f build.md ]; then
-    GP64=$(grep -E '^GooglePhotos \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-    GP32=$(grep -E '^GooglePhotos \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-    MX64=$(grep -E '^Music-Extended \(arm64-v8a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-    MX32=$(grep -E '^Music-Extended \(arm-v7a\):' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-    YT=$(grep -E '^YouTube:' build.md | awk -F': ' '{print $2}' | head -n1 || true)
-
-    CLI_REV=$(grep -E '^CLI:\s*j-hc/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-    CLI_INO=$(grep -E '^CLI:\s*inotia00/revanced-cli-[^ ]+\.jar' -m1 -o build.md | sed 's/^CLI:\s*//' || true)
-
-    PATCH_REV=$(grep -E '^Patches:\s*ReVanced/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
-    PATCH_INO=$(grep -E '^Patches:\s*inotia00/patches-[^ ]+\.rvp' -m1 -o build.md | sed 's/^Patches:\s*//' || true)
-  fi
-
-  TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  cat <<'JSON'
-{
-  "generatedAt": "__TS__",
-  "apps": {
-    "GooglePhotos": {
-      "arm64-v8a": "__GP64__",
-      "arm-v7a":   "__GP32__"
-    },
-    "Music-Extended": {
-      "arm64-v8a": "__MX64__",
-      "arm-v7a":   "__MX32__"
-    },
-    "YouTube": "__YT__"
-  },
-  "cli": {
-    "revanced": "__CLI_REV__",
-    "inotia00": "__CLI_INO__"
-  },
-  "patches": {
-    "revanced": "__PATCH_REV__",
-    "inotia00": "__PATCH_INO__"
-  }
-}
-JSON
-
-  # Replace placeholders with actual values safely
-  sed -e "s/__TS__/${TS}/" \
-      -e "s/__GP64__/${GP64}/" \
-      -e "s/__GP32__/${GP32}/" \
-      -e "s/__MX64__/${MX64}/" \
-      -e "s/__MX32__/${MX32}/" \
-      -e "s/__YT__/${YT}/" \
-      -e "s/__CLI_REV__/${CLI_REV}/" \
-      -e "s/__CLI_INO__/${CLI_INO}/" \
-      -e "s/__PATCH_REV__/${PATCH_REV}/" \
-      -e "s/__PATCH_INO__/${PATCH_INO}/" \
-      > latest.json
-
-  # Print to stdout for the workflow to capture
-  cat latest.json
-  exit 0
-fi
-
 set -euo pipefail
 shopt -s nullglob
 trap "rm -rf temp/*tmp.* temp/*/*tmp.* temp/*-temporary-files; exit 130" INT
@@ -195,7 +130,7 @@ for table_name in $(toml_get_table_names); do
 	fi
 
 	app_args[include_stock]=$(toml_get "$t" include-stock) || app_args[include_stock]=true && vtf "${app_args[include_stock]}" "include-stock"
-	app_args[dpi]=$(toml_get "$t" apkmirror-dpi) || app_args[dpi]="nodpi"
+	app_args[dpi]=$(toml_get "$t" dpi) || app_args[dpi]="nodpi"
 	table_name_f=${table_name,,}
 	table_name_f=${table_name_f// /-}
 	app_args[module_prop_name]=$(toml_get "$t" module-prop-name) || app_args[module_prop_name]="${table_name_f}-jhc"
