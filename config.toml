@@ -39,8 +39,14 @@ uptodown-dlurl = "https://google-photos.en.uptodown.com/android"
 [Twitter]
 build-mode = "apk"
 dpi = "120-640dpi"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/x-corp/twitter/"
+version = "latest"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/x-corp/twitter"
 # uptodown-dlurl = "https://twitter.en.uptodown.com/android"
+
+[Infinity]
+build-mode = "apk"
+version = "auto"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/docile-alligator/infinity-for-reddit-plus/infinity-for-reddit-8-1-0-release"
 
 [Spotify]
 enabled = false
