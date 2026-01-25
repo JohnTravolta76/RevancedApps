@@ -46,7 +46,7 @@ apkmirror-dlurl = "https://www.apkmirror.com/apk/x-corp/twitter"
 [Infinity]
 build-mode = "module"
 version = "auto"
-apkmirror-dlurl = "https://www.apkmirror.com/apk/docile-alligator/infinity-for-reddit-plus/infinity-for-reddit-8-1-0-release"
+apkmirror-dlurl = "https://www.apkmirror.com/apk/docile-alligator/infinity-for-reddit-plus/"
 
 [Spotify]
 enabled = false
