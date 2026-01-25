@@ -1,7 +1,9 @@
 GooglePhotos (arm64-v8a): 7.60.0.859276722  
 GooglePhotos (arm-v7a): 7.60.0.859276722  
+Infinity: 8.1.0  
 Music-Extended (arm64-v8a): 8.30.54  
 Music-Extended (arm-v7a): 8.30.54  
+Twitter: 11.59.0-release.0  
 YouTube (arm64-v8a): 20.14.43  
 YouTube (arm-v7a): 20.14.43  
 
