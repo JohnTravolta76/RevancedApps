@@ -47,6 +47,9 @@ uptodown-dlurl = "https://twitter.en.uptodown.com/android"
 build-mode = "module"
 version = "auto"
 apkmirror-dlurl = "https://www.apkmirror.com/apk/docile-alligator/infinity-for-reddit-plus/"
+patcher-args = """\  
+  -Oclient-id=YBtjqJX44tPhBVa9XulYzA \  
+  """
 
 [Spotify]
 enabled = false
