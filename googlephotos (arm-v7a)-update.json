@@ -1,6 +1,6 @@
 {
-    "version": "v7.60.0.859276722 (patches 5.48.0)",
-    "versionCode": 10,
-    "zipUrl": "https://github.com/JohnTravolta76/RevancedApps/releases/download/10/googlephotos-revanced-magisk-v7.60.0.859276722-arm-v7a.zip",
-    "changelog": "https://raw.githubusercontent.com/JohnTravolta76/RevancedApps/update/build.md"
-  }
+  "version": "v7.60.0.859276722 (patches 5.48.0.rvp)",
+  "versionCode": 11,
+  "zipUrl": "https://github.com/JohnTravolta76/RevancedApps/releases/download/11/googlephotos-revanced-magisk-v7.60.0.859276722-arm-v7a.zip",
+  "changelog": "https://raw.githubusercontent.com/JohnTravolta76/RevancedApps/update/build.md"
+}
