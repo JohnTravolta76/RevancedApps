@@ -456,13 +456,26 @@ get_archive_resp() {
 get_archive_vers() { sed 's/^[^-]*-//;s/-\(all\|arm64-v8a\|arm-v7a\)\.apk//g' <<<"$__ARCHIVE_RESP__"; }
 get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
 # -------------------- github --------------------
+get_github_resp() {
+    # We use this to cache the JSON so we don't hit rate limits
+    __GITHUB_RESP__=$(gh_req "https://api.github.com/repos/Docile-Alligator/Infinity-For-Reddit/releases/latest" -)
+}
+
+get_github_vers() {
+    # Extracts the tag name (e.g., v8.1.0)
+    jq -r '.tag_name' <<<"$__GITHUB_RESP__"
+}
+
+get_github_pkg_name() {
+    # Infinity's package name is hardcoded since it's not in the GitHub metadata
+    echo "ml.docilealligator.infinityforreddit"
+}
+
 dl_github() {
     local url=$1 version=$2 output=$3 arch=$4
-    local api_url="https://api.github.com/repos/Docile-Alligator/Infinity-For-Reddit/releases/latest"
     
-    # This version looks for any APK that DOES NOT contain "Patreon" 
-    # since the standard APK is universal anyway.
-    local dl_url=$(curl -s -H "$GH_HEADER" "$api_url" | jq -r '.assets[] | select(.name | endswith(".apk") and (contains("Patreon") | not)) | .browser_download_url' | head -n 1)
+    # Selects the APK that isn't the Patreon version
+    local dl_url=$(jq -r '.assets[] | select(.name | endswith(".apk") and (contains("Patreon") | not)) | .browser_download_url' <<<"$__GITHUB_RESP__")
     
     if [ -n "$dl_url" ] && [ "$dl_url" != "null" ]; then
         pr "Downloading from GitHub: $dl_url"
