@@ -52,7 +52,7 @@ ignore-signature = true
 arch = "arm64-v8a"
 build-mode = "apk"  
 version = "auto"  
-github-dlurl = "https://github.com/Docile-Alligator/Infinity-For-Reddit"
+github_dlurl = "https://github.com/Docile-Alligator/Infinity-For-Reddit"
 ignore-signature = true
 patcher-args = """ 
   -i "Spoof client" 
