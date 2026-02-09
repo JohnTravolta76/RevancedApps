@@ -458,15 +458,17 @@ get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
 # -------------------- github --------------------
 dl_github() {
     local url=$1 version=$2 output=$3 arch=$4
-    # Note: This specifically targets the Infinity repository based on your request
     local api_url="https://api.github.com/repos/Docile-Alligator/Infinity-For-Reddit/releases/latest"
-    local dl_url=$(curl -s -H "$GH_HEADER" "$api_url" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .browser_download_url")
+    
+    # This version looks for any APK that DOES NOT contain "Patreon" 
+    # since the standard APK is universal anyway.
+    local dl_url=$(curl -s -H "$GH_HEADER" "$api_url" | jq -r '.assets[] | select(.name | endswith(".apk") and (contains("Patreon") | not)) | .browser_download_url' | head -n 1)
     
     if [ -n "$dl_url" ] && [ "$dl_url" != "null" ]; then
         pr "Downloading from GitHub: $dl_url"
         req "$dl_url" "$output"
     else
-        epr "Could not find a matching asset on GitHub for arch: $arch"
+        epr "Could not find a valid APK on GitHub."
         return 1
     fi
 }
