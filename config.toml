@@ -10,10 +10,6 @@ parallel-jobs = 2
 # included-patches = ""
 
 # you can use rvmm-config-gen to generate a config
-[GLOBAL]
-use-prebuilt-apks = true
-prebuilt-folder = "temp"  # folder where prebuilt APKs live
-
 [YouTube]
 arch = "arm64-v8a"
 build-mode = "module"
