@@ -455,6 +455,21 @@ get_archive_resp() {
 }
 get_archive_vers() { sed 's/^[^-]*-//;s/-\(all\|arm64-v8a\|arm-v7a\)\.apk//g' <<<"$__ARCHIVE_RESP__"; }
 get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
+# -------------------- github --------------------
+dl_github() {
+    local url=$1 version=$2 output=$3 arch=$4
+    # Note: This specifically targets the Infinity repository based on your request
+    local api_url="https://api.github.com/repos/Docile-Alligator/Infinity-For-Reddit/releases/latest"
+    local dl_url=$(curl -s -H "$GH_HEADER" "$api_url" | jq -r ".assets[] | select(.name | contains(\"$arch\")) | .browser_download_url")
+    
+    if [ -n "$dl_url" ] && [ "$dl_url" != "null" ]; then
+        pr "Downloading from GitHub: $dl_url"
+        req "$dl_url" "$output"
+    else
+        epr "Could not find a matching asset on GitHub for arch: $arch"
+        return 1
+    fi
+}
 # --------------------------------------------------
 
 patch_apk() {
@@ -497,7 +512,7 @@ build_rv() {
 	[ "${args[exclusive_patches]}" = true ] && p_patcher_args+=("--exclusive")
 
 	local tried_dl=()
-	for dl_p in archive apkmirror uptodown; do
+	for dl_p in archive apkmirror uptodown github; do
 		if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
 			args[${dl_p}_dlurl]=""
@@ -551,7 +566,7 @@ build_rv() {
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
 	if [ ! -f "$stock_apk" ]; then
-		for dl_p in archive apkmirror uptodown; do
+		for dl_p in archive apkmirror uptodown github; do
 			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
 			pr "Downloading '${table}' from ${dl_p}"
 			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
