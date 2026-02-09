@@ -1,0 +1,66 @@
+name: Weekly upstream sync
+
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream
+        run: |
+          git remote add upstream https://github.com/j-hc/revanced-magisk-module.git || true
+          git fetch upstream
+
+      - name: Preserve config.toml and workflows
+        run: |
+          mkdir -p /tmp/preserve
+          cp config.toml /tmp/preserve/
+          cp -r .github/workflows /tmp/preserve/
+
+      - name: Sync with upstream
+        run: |
+          git checkout main
+          git reset --hard upstream/main
+
+      - name: Restore config.toml and workflows
+        run: |
+          cp /tmp/preserve/config.toml config.toml
+          cp -r /tmp/preserve/workflows .github/
+          git add config.toml .github/
+
+      - name: Check for changes
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "no_changes=true" >> $GITHUB_ENV
+          else
+            echo "no_changes=false" >> $GITHUB_ENV
+          fi
+
+      - name: Create Pull Request (if changes)
+        if: env.no_changes == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: auto-upstream-sync
+          commit-message: "chore: sync upstream (auto)"
+          title: "Weekly upstream sync"
+          body: "This PR updates the repo with the latest upstream changes while keeping your config.toml and workflows safe."
+          base: main
+          delete-branch: true
