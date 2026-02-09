@@ -55,7 +55,7 @@ version = "auto"
 #apkmirror-dlurl = "https://www.apkmirror.com/apk/docile-alligator/infinity-for-reddit-plus/"  
 ignore-signature = true
 use-prebuilt-apks = true
-prebuilt-folder = "temp/infinity"
+prebuilt-folder = "apks/infinity"
 patcher-args = """ 
   -i "Spoof client" 
   -Oclient-id=YBtjqJX44tPhBVa9XulYzA  
