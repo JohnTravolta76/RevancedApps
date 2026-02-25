@@ -99,7 +99,7 @@ get_prebuilts() {
 			name=$(jq -r .name <<<"$asset")
 			file="${dir}/${name}"
 			gh_dl "$file" "$url" >&2 || return 1
-			echo "$tag: $(cut -d/ -f1 <<<"$src")/${name}  " >>"${cl_dir}/changelog.md"
+			echo "$tag: $(cut -d/ -f1 <<<"$src")/${name}  " >>"${cl_dir}/changelog.md"
 		else
 			grab_cl=false
 			local for_err=$file
@@ -390,63 +390,85 @@ get_uptodown_resp() {
 	__UPTODOWN_RESP_PKG__=$(req "${1}/download" -)
 }
 get_uptodown_vers() { $HTMLQ --text ".version" <<<"$__UPTODOWN_RESP__"; }
-dl_uptodown() {  
-	local uptodown_dlurl=$1 version=$2 output=$3 arch=$4 _dpi=$5  
-	local apparch  
-	if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi  
-	if [ "$arch" = all ]; then  
-		apparch=('arm64-v8a, armeabi-v7a, x86_64' 'arm64-v8a, armeabi-v7a, x86, x86_64' 'arm64-v8a, armeabi-v7a' 'arm64-v8a' 'universal')  
-	else apparch=("${arch}" 'arm64-v8a, armeabi-v7a, x86_64' 'arm64-v8a, armeabi-v7a, x86, x86_64' 'arm64-v8a, armeabi-v7a' 'universal'); fi  
-  
-	local op resp data_code  
-	data_code=$($HTMLQ "#detail-app-name" --attribute data-code <<<"$__UPTODOWN_RESP__")  
-	local versionURL=""  
-	local is_bundle=false  
-	for i in {1..20}; do  
-		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" -)  
-		if ! op=$(jq -e -r ".data | map(select(.version == \"${version}\")) | .[0]" <<<"$resp"); then  
-			continue  
-		fi  
-		if [ "$(jq -e -r ".kindFile" <<<"$op")" = "xapk" ]; then is_bundle=true; fi  
-		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi  
-	done  
-	if [ -z "$versionURL" ]; then return 1; fi  
-	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")  
-	resp=$(req "$versionURL" -) || return 1  
-  
-	local data_version files node_arch data_file_id  
-	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || :  
-	if [ "$data_version" ]; then  
-		files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1  
-		# Loop through variants without 'return 1' on every mismatch  
-		for ((n = 1; n < 20; n += 2)); do  
-			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break  
-			[ -z "$node_arch" ] && break  
-			  
-			# Check if this variant matches our desired arch  
-			local match=false  
-			for a in "${apparch[@]}"; do  
-				if [[ "$node_arch" == *"$a"* ]]; then match=true; break; fi  
-			done  
-			[ "$match" = false ] && continue  
-  
-			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || continue  
-			if [ "$file_type" = "xapk" ]; then is_bundle=true; else is_bundle=false; fi  
-			  
-			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || continue  
-			resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -)  
-			break  
-		done  
-	fi  
-  
-	local data_url  
-	data_url=$($HTMLQ "#detail-download-button" --attribute data-url <<<"$resp") || return 1  
-	if [ "$is_bundle" = true ]; then  
-		req "https://dw.uptodown.com/dwn/${data_url}" "$output.apkm" || return 1  
-		merge_splits "${output}.apkm" "${output}"  
-	else  
-		req "https://dw.uptodown.com/dwn/${data_url}" "$output"  
-	fi  
+dl_uptodown() {
+	local uptodown_dlurl=$1 version=$2 output=$3 arch=$4 _dpi=$5
+	local apparch
+	if [ "$arch" = "arm-v7a" ]; then arch="armeabi-v7a"; fi
+	if [ "$arch" = all ]; then
+		apparch=('arm64-v8a, armeabi-v7a, x86_64' 'arm64-v8a, armeabi-v7a, x86, x86_64' 'arm64-v8a, armeabi-v7a' 'arm64-v8a' 'universal')
+	else apparch=("${arch}" 'arm64-v8a, armeabi-v7a, x86_64' 'arm64-v8a, armeabi-v7a, x86, x86_64' 'arm64-v8a, armeabi-v7a' 'universal'); fi
+
+	local op resp data_code
+	data_code=$($HTMLQ "#detail-app-name" --attribute data-code <<<"$__UPTODOWN_RESP__")
+	local versionURL=""
+	local is_bundle=false
+	for i in {1..20}; do
+		resp=$(req "${uptodown_dlurl}/apps/${data_code}/versions/${i}" -)
+		if ! op=$(jq -e -r ".data | map(select(.version == \"${version}\")) | .[0]" <<<"$resp"); then
+			continue
+		fi
+		# Note kindFile at top level; variants loop below will refine is_bundle per-variant
+		if [ "$(jq -e -r ".kindFile" <<<"$op")" = "xapk" ]; then is_bundle=true; fi
+		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi
+	done
+	if [ -z "$versionURL" ]; then return 1; fi
+	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
+	resp=$(req "$versionURL" -) || return 1
+
+	local data_version files node_arch data_file_id
+	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || :
+	if [ "$data_version" ]; then
+		files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1
+
+		# --- FIX: two-pass approach: prefer APK variant, fall back to XAPK ---
+		local best_file_id="" best_is_bundle=false
+
+		for ((n = 1; n < 20; n += 2)); do
+			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break
+			[ -z "$node_arch" ] && break
+
+			# Check if this variant matches our desired arch (substring match)
+			local match=false
+			for a in "${apparch[@]}"; do
+				if [[ "$node_arch" == *"$a"* ]]; then match=true; break; fi
+			done
+			[ "$match" = false ] && continue
+
+			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || continue
+			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || continue
+
+			if [ "$file_type" != "xapk" ]; then
+				# Found a plain APK variant — use it immediately
+				pr "Uptodown: found plain APK variant for arch '${node_arch}'"
+				best_file_id="$data_file_id"
+				best_is_bundle=false
+				break
+			elif [ -z "$best_file_id" ]; then
+				# No APK found yet — remember this XAPK as fallback
+				pr "Uptodown: found XAPK variant for arch '${node_arch}', keeping as fallback"
+				best_file_id="$data_file_id"
+				best_is_bundle=true
+			fi
+		done
+
+		if [ -z "$best_file_id" ]; then
+			epr "Uptodown: no matching variant found for arch '${arch}'"
+			return 1
+		fi
+
+		is_bundle=$best_is_bundle
+		resp=$(req "${uptodown_dlurl}/download/${best_file_id}-x" -)
+	fi
+
+	local data_url
+	data_url=$($HTMLQ "#detail-download-button" --attribute data-url <<<"$resp") || return 1
+	if [ "$is_bundle" = true ]; then
+		pr "Uptodown: downloading as XAPK (no plain APK available for this arch)"
+		req "https://dw.uptodown.com/dwn/${data_url}" "$output.apkm" || return 1
+		merge_splits "${output}.apkm" "${output}"
+	else
+		req "https://dw.uptodown.com/dwn/${data_url}" "$output"
+	fi
 }
 get_uptodown_pkg_name() { $HTMLQ --text "tr.full:nth-child(1) > td:nth-child(3)" <<<"$__UPTODOWN_RESP_PKG__"; }
 
@@ -467,33 +489,33 @@ get_archive_vers() { sed 's/^[^-]*-//;s/-\(all\|arm64-v8a\|arm-v7a\)\.apk//g' <<
 get_archive_pkg_name() { echo "$__ARCHIVE_PKG_NAME__"; }
 # -------------------- github --------------------
 get_github_resp() {
-    # We use this to cache the JSON so we don't hit rate limits
-    __GITHUB_RESP__=$(gh_req "https://api.github.com/repos/Docile-Alligator/Infinity-For-Reddit/releases/latest" -)
+	# We use this to cache the JSON so we don't hit rate limits
+	__GITHUB_RESP__=$(gh_req "https://api.github.com/repos/Docile-Alligator/Infinity-For-Reddit/releases/latest" -)
 }
 
 get_github_vers() {
-    # Extracts the tag name (e.g., v8.1.0)
-    jq -r '.tag_name' <<<"$__GITHUB_RESP__"
+	# Extracts the tag name (e.g., v8.1.0)
+	jq -r '.tag_name' <<<"$__GITHUB_RESP__"
 }
 
 get_github_pkg_name() {
-    # Infinity's package name is hardcoded since it's not in the GitHub metadata
-    echo "ml.docilealligator.infinityforreddit"
+	# Infinity's package name is hardcoded since it's not in the GitHub metadata
+	echo "ml.docilealligator.infinityforreddit"
 }
 
 dl_github() {
-    local url=$1 version=$2 output=$3 arch=$4
-    
-    # Selects the APK that isn't the Patreon version
-    local dl_url=$(jq -r '.assets[] | select(.name | endswith(".apk") and (contains("Patreon") | not)) | .browser_download_url' <<<"$__GITHUB_RESP__")
-    
-    if [ -n "$dl_url" ] && [ "$dl_url" != "null" ]; then
-        pr "Downloading from GitHub: $dl_url"
-        req "$dl_url" "$output"
-    else
-        epr "Could not find a valid APK on GitHub."
-        return 1
-    fi
+	local url=$1 version=$2 output=$3 arch=$4
+
+	# Selects the APK that isn't the Patreon version
+	local dl_url=$(jq -r '.assets[] | select(.name | endswith(".apk") and (contains("Patreon") | not)) | .browser_download_url' <<<"$__GITHUB_RESP__")
+
+	if [ -n "$dl_url" ] && [ "$dl_url" != "null" ]; then
+		pr "Downloading from GitHub: $dl_url"
+		req "$dl_url" "$output"
+	else
+		epr "Could not find a valid APK on GitHub."
+		return 1
+	fi
 }
 # --------------------------------------------------
 
@@ -536,11 +558,13 @@ build_rv() {
 	if [ "${args[included_patches]}" ]; then p_patcher_args+=("$(join_args "${args[included_patches]}" -e)"); fi
 	[ "${args[exclusive_patches]}" = true ] && p_patcher_args+=("--exclusive")
 
+	# --- FIX: use a local 'key' variable to avoid "unbound variable" with assoc array ---
 	local tried_dl=()
 	for dl_p in archive apkmirror uptodown github; do
-		if [[ -z "${args[${dl_p}_dlurl]:-}" ]]; then continue; fi
-		if ! get_${dl_p}_resp "${args[${dl_p}_dlurl]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
-			args[$dl_p]=""
+		local key="${dl_p}_dlurl"
+		if [[ -z "${args[$key]:-}" ]]; then continue; fi
+		if ! get_${dl_p}_resp "${args[$key]}" || ! pkg_name=$(get_"${dl_p}"_pkg_name); then
+			args[$key]=""
 			epr "ERROR: Could not find ${table} in ${dl_p}"
 			continue
 		fi
@@ -591,11 +615,13 @@ build_rv() {
 	version_f=${version_f#v}
 	local stock_apk="${TEMP_DIR}/${pkg_name}-${version_f}-${arch_f}.apk"
 	if [ ! -f "$stock_apk" ]; then
+		# --- FIX: same 'key' fix in the download loop ---
 		for dl_p in archive apkmirror uptodown github; do
-			if [ -z "${args[${dl_p}_dlurl]}" ]; then continue; fi
+			local key="${dl_p}_dlurl"
+			if [ -z "${args[$key]:-}" ]; then continue; fi
 			pr "Downloading '${table}' from ${dl_p}"
-			if ! isoneof $dl_p "${tried_dl[@]}"; then get_${dl_p}_resp "${args[${dl_p}_dlurl]}"; fi
-			if ! dl_${dl_p} "${args[${dl_p}_dlurl]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
+			if ! isoneof "$dl_p" "${tried_dl[@]}"; then get_${dl_p}_resp "${args[$key]}"; fi
+			if ! dl_${dl_p} "${args[$key]}" "$version" "$stock_apk" "$arch" "${args[dpi]}" "$get_latest_ver"; then
 				epr "ERROR: Could not download '${table}' from ${dl_p} with version '${version}', arch '${arch}', dpi '${args[dpi]}'"
 				continue
 			fi
@@ -616,11 +642,6 @@ build_rv() {
 		p_patcher_args=("${p_patcher_args[@]//-[ei] ${microg_patch}/}")
 	fi
 
-	# local spoof_client_patch
-	# spoof_client_patch=$(grep "^Name: " <<<"$list_patches" | grep -i "Spoof Client" || :) spoof_client_patch=${spoof_client_patch#*: }
-	# local spoof_video_patch
-	# spoof_video_patch=$(grep "^Name: " <<<"$list_patches" | grep -i "Spoof Video" || :) spoof_video_patch=${spoof_video_patch#*: }
-
 	local patcher_args patched_apk build_mode
 	local rv_brand_f=${args[rv_brand],,}
 	rv_brand_f=${rv_brand_f// /-}
@@ -640,12 +661,6 @@ build_rv() {
 				patcher_args+=("-d \"${microg_patch}\"")
 			fi
 		fi
-		# if [ -n "$spoof_client_patch" ] && [[ ! ${p_patcher_args[*]} =~ $spoof_client_patch ]] && [ "$build_mode" = module ]; then
-		# 	patcher_args+=("-d \"${spoof_client_patch}\"")
-		# fi
-		# if [ -n "$spoof_video_patch" ] && [[ ! ${p_patcher_args[*]} =~ $spoof_video_patch ]] && [ "$build_mode" = module ]; then
-		# 	patcher_args+=("-d \"${spoof_video_patch}\"")
-		# fi
 		if [ "${args[riplib]}" = true ]; then
 			patcher_args+=("--rip-lib x86_64 --rip-lib x86")
 			if [ "$build_mode" = module ]; then
