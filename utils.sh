@@ -418,26 +418,16 @@ dl_uptodown() {
 	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || return 1
 	if [ "$data_version" ]; then
 		files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1
-		local matched=false  
-		for ((n = 1; n < 12; n += 2)); do  
-			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || return 1  
-			if [ -z "$node_arch" ]; then break; fi  
-			if ! isoneof "$node_arch" "${apparch[@]}"; then continue; fi  
-			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || return 1  
-			if [ "$file_type" = "xapk" ]; then is_bundle=true; else is_bundle=false; fi  
-			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || return 1  
-			resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -)  
-			matched=true  
-			break  
-		done  
-		# Fallback: if no arch matched, try the first available variant  
-		if [ "$matched" = false ]; then  
-			epr "No exact arch match found in variants, trying first available variant"  
-			data_file_id=$($HTMLQ "div.variant:nth-child(2) > .v-report" --attribute data-file-id <<<"$files") || return 1  
-			file_type=$($HTMLQ -w -t "div.variant:nth-child(2) > .v-file > span" <<<"$files") || return 1  
-			if [ "$file_type" = "xapk" ]; then is_bundle=true; else is_bundle=false; fi  
-			resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -)  
-		fi
+		for ((n = 1; n < 12; n += 2)); do
+			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || return 1
+			if [ -z "$node_arch" ]; then return 1; fi
+			if ! isoneof "$node_arch" "${apparch[@]}"; then continue; fi
+			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || return 1
+			if [ "$file_type" = "xapk" ]; then is_bundle=true; else is_bundle=false; fi
+			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || return 1
+			resp=$(req "${uptodown_dlurl}/download/${data_file_id}-x" -)
+			break
+		done
 	fi
 	local data_url
 	data_url=$($HTMLQ "#detail-download-button" --attribute data-url <<<"$resp") || return 1
