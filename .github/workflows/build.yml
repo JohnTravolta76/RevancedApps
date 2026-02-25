@@ -8,12 +8,6 @@ on:
         default: true
 
   workflow_dispatch:  
-    inputs:  
-      from_ci:  
-        type: boolean  
-        description: "Run config update step"  
-        required: false  
-        default: false
 
 jobs:
   run:
@@ -32,7 +26,8 @@ jobs:
           submodules: true
 
       - name: Update config
-        if: ${{ inputs.from_ci }}
+        # Only run if it's NOT a manual trigger (e.g., runs on workflow_call)  
+        if: github.event_name != 'workflow_dispatch'
         run: |
           if git checkout origin/update build.md; then
             UPDATE_CFG=$(./build.sh config.toml --config-update)
