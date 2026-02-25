@@ -53,89 +53,114 @@ get_prebuilts() {
 	cl_dir=${TEMP_DIR}/${cl_dir,,}-rv
 	[ -d "$cl_dir" ] || mkdir "$cl_dir"
 
-	for src_ver in "$cli_src CLI $cli_ver revanced-cli" "$patches_src Patches $patches_ver patches"; do
-		set -- $src_ver
-		local src=$1 tag=$2 ver=${3-} fprefix=$4
-		local ext
+	# ── Step 1: download CLI first so we can detect PATCH_EXT ──────────────
+	local cli_dir=${cli_src%/*}
+	cli_dir=${TEMP_DIR}/${cli_dir,,}-rv
+	[ -d "$cli_dir" ] || mkdir "$cli_dir"
 
-		if [ "$tag" = "CLI" ]; then
-			ext="jar"
-			local grab_cl=false
-		elif [ "$tag" = "Patches" ]; then
-			ext=$PATCH_EXT
-			local grab_cl=true
-		else abort unreachable; fi
+	local cli_rv_rel="https://api.github.com/repos/${cli_src}/releases"
+	local cli_ver_resolved=$cli_ver
+	if [ "$cli_ver" = "dev" ]; then
+		local resp
+		resp=$(gh_req "$cli_rv_rel" -) || return 1
+		cli_ver_resolved=$(jq -e -r '.[] | .tag_name' <<<"$resp" | get_highest_ver) || return 1
+	fi
+	local cli_rv_rel_tag
+	if [ "$cli_ver" = "latest" ]; then
+		cli_rv_rel_tag="${cli_rv_rel}/latest"
+	else
+		cli_rv_rel_tag="${cli_rv_rel}/tags/${cli_ver_resolved}"
+	fi
 
-		local dir=${src%/*}
-		dir=${TEMP_DIR}/${dir,,}-rv
-		[ -d "$dir" ] || mkdir "$dir"
+	local cli_file cli_name cli_tag_name
+	cli_file=$(find "$cli_dir" -name "revanced-cli-*.jar" -type f 2>/dev/null | head -1)
+	if [ -z "$cli_file" ]; then
+		local resp asset
+		resp=$(gh_req "$cli_rv_rel_tag" -) || return 1
+		cli_tag_name=$(jq -r '.tag_name' <<<"$resp")
+		asset=$(jq -e ".[0]" <<<"$(jq -e '.assets | map(select(.name | endswith("jar")))' <<<"$resp")")
+		cli_name=$(jq -r .name <<<"$asset")
+		cli_file="${cli_dir}/${cli_name}"
+		gh_dl "$cli_file" "$(jq -r .url <<<"$asset")" >&2 || return 1
+		echo "CLI: $(cut -d/ -f1 <<<"$cli_src")/${cli_name}  " >>"${cl_dir}/changelog.md"
+	fi
 
-		local rv_rel="https://api.github.com/repos/${src}/releases" name_ver
-		if [ "$ver" = "dev" ]; then
-			local resp
-			resp=$(gh_req "$rv_rel" -) || return 1
-			ver=$(jq -e -r '.[] | .tag_name' <<<"$resp" | get_highest_ver) || return 1
+	# ── Step 2: detect PATCH_EXT from CLI help output ──────────────────────
+	PATCH_EXT=$(java -jar "$cli_file" -h | grep -oP -m1 '\w+(?= files)' | tr '[:upper:]' '[:lower:]')
+	# Fallback: detect from actual patches asset name on GitHub
+	if [ -z "$PATCH_EXT" ]; then
+		local resp
+		resp=$(gh_req "https://api.github.com/repos/${patches_src}/releases/latest" -) || return 1
+		PATCH_EXT=$(jq -r '.assets[].name' <<<"$resp" | grep -oP '\.(rvp|rve|jar)$' | head -1 | tr -d '.')
+	fi
+	if [ -z "$PATCH_EXT" ]; then abort "Unable to detect patch extension."; fi
+	pr "Detected patch extension: ${PATCH_EXT}" >&2
+
+	# ── Step 3: download patches with now-known PATCH_EXT ──────────────────
+	local patches_rv_rel="https://api.github.com/repos/${patches_src}/releases"
+	local patches_ver_resolved=$patches_ver
+	if [ "$patches_ver" = "dev" ]; then
+		local resp
+		resp=$(gh_req "$patches_rv_rel" -) || return 1
+		patches_ver_resolved=$(jq -e -r '.[] | .tag_name' <<<"$resp" | get_highest_ver) || return 1
+	fi
+	local patches_rv_rel_tag
+	if [ "$patches_ver" = "latest" ]; then
+		patches_rv_rel_tag="${patches_rv_rel}/latest"
+	else
+		patches_rv_rel_tag="${patches_rv_rel}/tags/${patches_ver_resolved}"
+	fi
+
+	local patches_dir=${patches_src%/*}
+	patches_dir=${TEMP_DIR}/${patches_dir,,}-rv
+	[ -d "$patches_dir" ] || mkdir "$patches_dir"
+
+	local patches_file patches_name patches_tag_name grab_cl=true
+	local name_ver
+	if [ "$patches_ver" = "latest" ]; then name_ver="*"; else name_ver="$patches_ver_resolved"; fi
+	patches_file=$(find "$patches_dir" -name "patches-${name_ver#v}.${PATCH_EXT}" -type f 2>/dev/null | head -1)
+	if [ -z "$patches_file" ]; then
+		local resp asset matches
+		resp=$(gh_req "$patches_rv_rel_tag" -) || return 1
+		patches_tag_name=$(jq -r '.tag_name' <<<"$resp")
+		matches=$(jq -e ".assets | map(select(.name | endswith(\"${PATCH_EXT}\")))" <<<"$resp")
+		if [ "$(jq 'length' <<<"$matches")" -ne 1 ]; then
+			epr "More than 1 patches asset found. Using first one..."
 		fi
-		if [ "$ver" = "latest" ]; then
-			rv_rel+="/latest"
-			name_ver="*"
-		else
-			rv_rel+="/tags/${ver}"
-			name_ver="$ver"
-		fi
+		asset=$(jq -r ".[0]" <<<"$matches")
+		patches_name=$(jq -r .name <<<"$asset")
+		patches_file="${patches_dir}/${patches_name}"
+		gh_dl "$patches_file" "$(jq -r .url <<<"$asset")" >&2 || return 1
+		echo "Patches: $(cut -d/ -f1 <<<"$patches_src")/${patches_name}  " >>"${cl_dir}/changelog.md"
+		echo -e "[Changelog](https://github.com/${patches_src}/releases/tag/${patches_tag_name})\n" >>"${cl_dir}/changelog.md"
+	else
+		grab_cl=false
+		patches_name=$(basename "$patches_file")
+		patches_tag_name=$(cut -d'-' -f3- <<<"$patches_name")
+		patches_tag_name=v${patches_tag_name%.*}
+	fi
 
-		local url file tag_name name
-		file=$(find "$dir" -name "${fprefix}-${name_ver#v}.${ext}" -type f 2>/dev/null)
-		if [ -z "$file" ]; then
-			local resp asset name
-			resp=$(gh_req "$rv_rel" -) || return 1
-			tag_name=$(jq -r '.tag_name' <<<"$resp")
-			matches=$(jq -e ".assets | map(select(.name | endswith(\"$ext\")))" <<<"$resp")
-			if [ "$(jq 'length' <<<"$matches")" -ne 1 ]; then
-				epr "More than 1 asset was found for this cli release. Fallbacking to the first one found..."
-			fi
-			asset=$(jq -r ".[0]" <<<"$matches")
-			url=$(jq -r .url <<<"$asset")
-			name=$(jq -r .name <<<"$asset")
-			file="${dir}/${name}"
-			gh_dl "$file" "$url" >&2 || return 1
-			echo "$tag: $(cut -d/ -f1 <<<"$src")/${name}  " >>"${cl_dir}/changelog.md"
-		else
-			grab_cl=false
-			local for_err=$file
-			if [ "$ver" = "latest" ]; then
-				file=$(grep -v '/[^/]*dev[^/]*$' <<<"$file" | head -1)
-			else file=$(grep "/[^/]*${ver#v}[^/]*\$" <<<"$file" | head -1); fi
-			if [ -z "$file" ]; then abort "filter fail: '$for_err' with '$ver'"; fi
-			name=$(basename "$file")
-			tag_name=$(cut -d'-' -f3- <<<"$name")
-			tag_name=v${tag_name%.*}
+	# ── Step 4: optional integrations patching ─────────────────────────────
+	if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ]; then
+		local inner_ext="${PATCH_EXT%p}e"
+		if ! (
+			mkdir -p "${patches_file}-zip" || return 1
+			unzip -qo "${patches_file}" -d "${patches_file}-zip" || return 1
+			java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main \
+				"${patches_file}-zip/extensions/shared.${inner_ext}" \
+				"${patches_file}-zip/extensions/shared-patched.${inner_ext}" || return 1
+			mv -f "${patches_file}-zip/extensions/shared-patched.${inner_ext}" \
+				"${patches_file}-zip/extensions/shared.${inner_ext}" || return 1
+			rm "${patches_file}" || return 1
+			cd "${patches_file}-zip" || abort
+			zip -0rq "${CWD}/${patches_file}" . || return 1
+		) >&2; then
+			echo >&2 "Patching revanced-integrations failed"
 		fi
+		rm -r "${patches_file}-zip" || :
+	fi
 
-		if [ "$tag" = "CLI" ]; then
-			PATCH_EXT=$(java -jar "$file" -h | grep -oP -m1 '\w+(?= files)' | tr '[:upper:]' '[:lower:]')
-			if [ -z "$PATCH_EXT" ]; then abort "Unable to detect patch extension from CLI help output."; fi
-		elif [ "$tag" = "Patches" ]; then
-			if [ $grab_cl = true ]; then echo -e "[Changelog](https://github.com/${src}/releases/tag/${tag_name})\n" >>"${cl_dir}/changelog.md"; fi
-			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ]; then
-				# Dynamically calculate inner extension (rvp->rve, mpp->mpe)
-				local inner_ext="${ext%p}e"
-				if ! (
-					mkdir -p "${file}-zip" || return 1
-					unzip -qo "${file}" -d "${file}-zip" || return 1
-					java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main "${file}-zip/extensions/shared.${inner_ext}" "${file}-zip/extensions/shared-patched.${inner_ext}" || return 1
-					mv -f "${file}-zip/extensions/shared-patched.${inner_ext}" "${file}-zip/extensions/shared.${inner_ext}" || return 1
-					rm "${file}" || return 1
-					cd "${file}-zip" || abort
-					zip -0rq "${CWD}/${file}" . || return 1
-				) >&2; then
-					echo >&2 "Patching revanced-integrations failed"
-				fi
-				rm -r "${file}-zip" || :
-			fi
-		fi
-		echo -n "$file "
-	done
+	echo -n "$cli_file $patches_file"
 	echo
 }
 
