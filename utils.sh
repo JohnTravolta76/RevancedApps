@@ -407,8 +407,6 @@ dl_uptodown() {
 		if ! op=$(jq -e -r ".data | map(select(.version == \"${version}\")) | .[0]" <<<"$resp"); then
 			continue
 		fi
-		# Note kindFile at top level; variants loop below will refine is_bundle per-variant
-		if [ "$(jq -e -r ".kindFile" <<<"$op")" = "xapk" ]; then is_bundle=true; fi
 		if versionURL=$(jq -e -r '.versionURL' <<<"$op"); then break; else return 1; fi
 	done
 	if [ -z "$versionURL" ]; then return 1; fi
@@ -420,14 +418,20 @@ dl_uptodown() {
 	if [ "$data_version" ]; then
 		files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1
 
-		# --- FIX: two-pass approach: prefer APK variant, fall back to XAPK ---
-		local best_file_id="" best_is_bundle=false
+		# DEBUG: print all variants found
+		epr "DEBUG variants HTML snippet:"
+		for ((n = 1; n < 20; n += 2)); do
+			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break
+			[ -z "$node_arch" ] && break
+			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || continue
+			epr "  n=$n arch='${node_arch}' type='${file_type}'"
+		done
 
+		local best_file_id="" best_is_bundle=false
 		for ((n = 1; n < 20; n += 2)); do
 			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break
 			[ -z "$node_arch" ] && break
 
-			# Check if this variant matches our desired arch (substring match)
 			local match=false
 			for a in "${apparch[@]}"; do
 				if [[ "$node_arch" == *"$a"* ]]; then match=true; break; fi
@@ -438,13 +442,11 @@ dl_uptodown() {
 			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || continue
 
 			if [ "$file_type" != "xapk" ]; then
-				# Found a plain APK variant — use it immediately
 				pr "Uptodown: found plain APK variant for arch '${node_arch}'"
 				best_file_id="$data_file_id"
 				best_is_bundle=false
 				break
 			elif [ -z "$best_file_id" ]; then
-				# No APK found yet — remember this XAPK as fallback
 				pr "Uptodown: found XAPK variant for arch '${node_arch}', keeping as fallback"
 				best_file_id="$data_file_id"
 				best_is_bundle=true
@@ -463,9 +465,9 @@ dl_uptodown() {
 	local data_url
 	data_url=$($HTMLQ "#detail-download-button" --attribute data-url <<<"$resp") || return 1
 	if [ "$is_bundle" = true ]; then
-		pr "Uptodown: downloading as XAPK (no plain APK available for this arch)"
-		req "https://dw.uptodown.com/dwn/${data_url}" "$output.apkm" || return 1
-		merge_splits "${output}.apkm" "${output}"
+		pr "Uptodown: downloading XAPK and extracting splits"
+		req "https://dw.uptodown.com/dwn/${data_url}" "$output.xapk" || return 1
+		merge_xapk "$output.xapk" "$output"
 	else
 		req "https://dw.uptodown.com/dwn/${data_url}" "$output"
 	fi
