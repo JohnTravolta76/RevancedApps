@@ -413,42 +413,51 @@ dl_uptodown() {
 	versionURL=$(jq -e -r '.url + "/" + .extraURL + "/" + (.versionID | tostring)' <<<"$versionURL")
 	resp=$(req "$versionURL" -) || return 1
 
-	local data_version files node_arch data_file_id
+	local data_version files node_arch data_file_id file_type
 	data_version=$($HTMLQ '.button.variants' --attribute data-version <<<"$resp") || :
 	if [ "$data_version" ]; then
 		files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1
 
-		# DEBUG: print all variants found
-		epr "DEBUG variants HTML snippet:"
-		for ((n = 1; n < 20; n += 2)); do
-			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break
-			[ -z "$node_arch" ] && break
-			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || continue
-			files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1  
-			epr "DEBUG RAW FILES HTML: $(echo "$files" | head -c 2000)"
-		done
+		local best_file_id="" best_is_bundle=false current_arch=""
 
-		local best_file_id="" best_is_bundle=false
-		for ((n = 1; n < 20; n += 2)); do
-			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break
-			[ -z "$node_arch" ] && break
+		for ((n = 1; n <= 50; n++)); do
+			# Check if this child is a <p> (arch label)
+			local maybe_arch
+			maybe_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || true
+			if [ -n "$maybe_arch" ]; then
+				# Strip the icon alt text, keep only the arch string (last word/line)
+				current_arch=$(echo "$maybe_arch" | tr -s ' \n\t' ' ' | xargs)
+				# The <p> contains an <img alt=""> then the arch text; after xargs it's like "armeabi-v7a" or "arm64-v8a"
+				# Strip anything before the last space-separated token that looks like an arch
+				current_arch=$(grep -oE '(arm64-v8a|armeabi-v7a|x86_64|x86|universal)' <<<"$current_arch" | paste -sd ', ')
+				continue
+			fi
 
+			# Check if this child is a div.variant
+			file_type=$($HTMLQ ".content > div.variant:nth-child($n) > .v-file > span" --text <<<"$files" | xargs) || true
+			[ -z "$file_type" ] && continue
+			data_file_id=$($HTMLQ ".content > div.variant:nth-child($n) > .v-report" --attribute data-file-id <<<"$files") || true
+			[ -z "$data_file_id" ] && continue
+
+			[ -z "$current_arch" ] && continue
+
+			# Check if current_arch matches desired apparch
 			local match=false
 			for a in "${apparch[@]}"; do
-				if [[ "$node_arch" == *"$a"* ]]; then match=true; break; fi
+				if [[ "$current_arch" == *"$a"* ]] || [[ "$a" == *"$current_arch"* ]]; then
+					match=true
+					break
+				fi
 			done
 			[ "$match" = false ] && continue
 
-			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || continue
-			data_file_id=$($HTMLQ "div.variant:nth-child($((n + 1))) > .v-report" --attribute data-file-id <<<"$files") || continue
-
 			if [ "$file_type" != "xapk" ]; then
-				pr "Uptodown: found plain APK variant for arch '${node_arch}'"
+				pr "Uptodown: found plain APK variant for arch '${current_arch}'"
 				best_file_id="$data_file_id"
 				best_is_bundle=false
 				break
 			elif [ -z "$best_file_id" ]; then
-				pr "Uptodown: found XAPK variant for arch '${node_arch}', keeping as fallback"
+				pr "Uptodown: found XAPK variant for arch '${current_arch}', keeping as fallback"
 				best_file_id="$data_file_id"
 				best_is_bundle=true
 			fi
