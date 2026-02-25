@@ -424,7 +424,8 @@ dl_uptodown() {
 			node_arch=$($HTMLQ ".content > p:nth-child($n)" --text <<<"$files" | xargs) || break
 			[ -z "$node_arch" ] && break
 			file_type=$($HTMLQ -w -t "div.variant:nth-child($((n + 1))) > .v-file > span" <<<"$files") || continue
-			epr "  n=$n arch='${node_arch}' type='${file_type}'"
+			files=$(req "${uptodown_dlurl%/*}/app/${data_code}/version/${data_version}/files" - | jq -e -r .content) || return 1  
+			epr "DEBUG RAW FILES HTML: $(echo "$files" | head -c 2000)"
 		done
 
 		local best_file_id="" best_is_bundle=false
