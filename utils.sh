@@ -698,17 +698,29 @@ build_rv() {
 				patcher_args+=("-d \"${microg_patch}\"")
 			fi
 		fi
-		if [ "${args[riplib]}" = true ]; then
-			patcher_args+=("--rip-lib x86_64 --rip-lib x86")
-			if [ "$build_mode" = module ]; then
-				patcher_args+=("--rip-lib arm64-v8a --rip-lib armeabi-v7a --unsigned")
-			else
-				if [ "$arch" = "arm64-v8a" ]; then
-					patcher_args+=("--rip-lib armeabi-v7a")
-				elif [ "$arch" = "arm-v7a" ]; then
-					patcher_args+=("--rip-lib arm64-v8a")
-				fi
-			fi
+		if [ "${args[riplib]}" = true ]; then  
+			# Always rip desktop architectures  
+			patcher_args+=("--rip-lib x86_64 --rip-lib x86")  
+			  
+			if [ "$build_mode" = module ]; then  
+				# For modules, we MUST keep the architecture the user requested  
+				# so the system can find the native libs.  
+				if [ "$arch" = "arm64-v8a" ]; then  
+					patcher_args+=("--rip-lib armeabi-v7a --unsigned")  
+				elif [ "$arch" = "arm-v7a" ]; then  
+					patcher_args+=("--rip-lib arm64-v8a --unsigned")  
+				else  
+					# If arch is 'all', don't rip any mobile libs  
+					patcher_args+=("--unsigned")  
+				fi  
+			else  
+				# For non-root APKs, we can be more aggressive  
+				if [ "$arch" = "arm64-v8a" ]; then  
+					patcher_args+=("--rip-lib armeabi-v7a")  
+				elif [ "$arch" = "arm-v7a" ]; then  
+					patcher_args+=("--rip-lib arm64-v8a")  
+				fi  
+			fi  
 		fi
 		if [ "${NORB:-}" != true ] || [ ! -f "$patched_apk" ]; then
 			if ! patch_apk "$stock_apk" "$patched_apk" "${patcher_args[*]}" "${args[cli]}" "${args[ptjar]}"; then
