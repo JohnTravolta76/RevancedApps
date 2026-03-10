@@ -118,20 +118,36 @@ get_prebuilts() {
 		if [ "$tag" = "Patches" ]; then
 			if [ $grab_cl = true ]; then echo -e "[Changelog](https://github.com/${src}/releases/tag/${tag_name})\n" >>"${cl_dir}/changelog.md"; fi
 			if [ "$REMOVE_RV_INTEGRATIONS_CHECKS" = true ]; then
-				local extensions_ext
-				extensions_ext=$(unzip -l "${file}" "extensions/shared.*" | grep -o "shared\..*") extensions_ext="${extensions_ext#*.}"
-				if ! (
-					mkdir -p "${file}-zip" || return 1
-					unzip -qo "${file}" -d "${file}-zip" || return 1
-					java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" com.jhc.Main "${file}-zip/extensions/shared.${extensions_ext}" "${file}-zip/extensions/shared-patched.${extensions_ext}" || return 1
-					mv -f "${file}-zip/extensions/shared-patched.${extensions_ext}" "${file}-zip/extensions/shared.${extensions_ext}" || return 1
-					rm "${file}" || return 1
-					cd "${file}-zip" || abort
-					zip -0rq "${CWD}/${file}" . || return 1
-				) >&2; then
-					echo >&2 "Patching revanced-integrations failed"
-				fi
-				rm -r "${file}-zip" || :
+			    local shared_file
+			
+			    shared_file=$(unzip -l "${file}" "extensions/shared*" 2>/dev/null | awk '{print $NF}' | grep "shared" | head -1)
+			
+			    if [ -z "$shared_file" ]; then
+			        wpr "No integrations extension found in patches. Skipping integrations patch."
+			    else
+			        local extensions_ext="${shared_file##*.}"
+			
+			        if ! (
+			            mkdir -p "${file}-zip" || return 1
+			            unzip -qo "${file}" -d "${file}-zip" || return 1
+			
+			            java -cp "${BIN_DIR}/paccer.jar:${BIN_DIR}/dexlib2.jar" \
+			            com.jhc.Main \
+			            "${file}-zip/extensions/shared.${extensions_ext}" \
+			            "${file}-zip/extensions/shared-patched.${extensions_ext}" || return 1
+			
+			            mv -f "${file}-zip/extensions/shared-patched.${extensions_ext}" \
+			            "${file}-zip/extensions/shared.${extensions_ext}" || return 1
+			
+			            rm "${file}" || return 1
+			            cd "${file}-zip" || exit 1
+			            zip -0rq "${CWD}/${file}" . || return 1
+			        ) >&2; then
+			            wpr "Skipping integrations patch (structure changed)"
+			        fi
+			
+			        rm -rf "${file}-zip" || :
+			    fi
 			fi
 		fi
 		echo -n "$file "
