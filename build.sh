@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+RV_BUILD_THREADS=${RV_BUILD_THREADS:-4}
 
 set -euo pipefail
 shopt -s nullglob
@@ -24,9 +25,9 @@ toml_prep "${1:-config.toml}" || abort "could not find config file '${1:-config.
 main_config_t=$(toml_get_table_main)
 COMPRESSION_LEVEL=$(toml_get "$main_config_t" compression-level) || COMPRESSION_LEVEL="9"
 if ! PARALLEL_JOBS=$(toml_get "$main_config_t" parallel-jobs); then
-	if [ "$OS" = Android ]; then PARALLEL_JOBS=1; else PARALLEL_JOBS=$(nproc); fi
+	PARALLEL_JOBS=${RV_BUILD_THREADS:-$(nproc)}
 fi
-REMOVE_RV_INTEGRATIONS_CHECKS=$(toml_get "$main_config_t" remove-rv-integrations-checks) || REMOVE_RV_INTEGRATIONS_CHECKS="true"
+REMOVE_RV_INTEGRATIONS_CHECKS=false
 DEF_PATCHES_VER=$(toml_get "$main_config_t" patches-version) || DEF_PATCHES_VER="latest"
 DEF_CLI_VER=$(toml_get "$main_config_t" cli-version) || DEF_CLI_VER="latest"
 DEF_PATCHES_SRC=$(toml_get "$main_config_t" patches-source) || DEF_PATCHES_SRC="ReVanced/revanced-patches"
